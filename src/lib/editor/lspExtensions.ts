@@ -274,8 +274,8 @@ function createLuauHover() {
             const codeWrapper = document.createElement('div');
             codeWrapper.style.cssText = `
               padding: 10px 14px;
-              background: var(--bg-tertiary);
-              border-left: 3px solid var(--accent);
+              background: var(--bg-secondary);
+              // border-left: 3px solid var(--accent);
             `;
             const code = document.createElement('code');
             code.textContent = codeBlockMatch[1];
@@ -289,8 +289,8 @@ function createLuauHover() {
             const textWrapper = document.createElement('div');
             textWrapper.style.cssText = `
               padding: 10px 14px;
-              background: var(--bg-tertiary);
-              border-left: 3px solid var(--accent);
+              background: var(--bg-secondary);
+              // border-left: 3px solid var(--accent);
               color: var(--text-primary);
               white-space: pre-wrap;
             `;

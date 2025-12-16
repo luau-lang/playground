@@ -72,11 +72,11 @@ const darkColors: ThemeColors = {
   builtin: "oklch(0.75 0.12 200)",
 
   error: "oklch(0.65 0.2 25)",
-  errorBg: "oklch(0.25 0.08 25)",
+  errorBg: "oklch(0.2 0.08 25)",
   warning: "oklch(0.75 0.15 85)",
-  warningBg: "oklch(0.25 0.06 85)",
+  warningBg: "oklch(0.2 0.06 85)",
   info: "oklch(0.65 0.15 220)",
-  infoBg: "oklch(0.2 0.04 220)",
+  infoBg: "oklch(0.15 0.04 220)",
 };
 
 const lightColors: ThemeColors = {
@@ -104,11 +104,11 @@ const lightColors: ThemeColors = {
   builtin: "oklch(0.45 0.15 200)",
 
   error: "oklch(0.55 0.22 25)",
-  errorBg: "oklch(0.95 0.04 25)",
+  errorBg: "oklch(0.97 0.04 25)",
   warning: "oklch(0.55 0.18 85)",
-  warningBg: "oklch(0.95 0.04 85)",
+  warningBg: "oklch(0.97 0.04 85)",
   info: "oklch(0.5 0.18 220)",
-  infoBg: "oklch(0.95 0.02 220)",
+  infoBg: "oklch(0.97 0.02 220)",
 };
 
 // ============================================================================
@@ -164,17 +164,10 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
 
         // Tooltip styling
         ".cm-tooltip": {
-          backgroundColor: "transparent",
-          border: "none",
+          backgroundColor: "var(--bg-secondary)",
+          border: "1px solid var(--bg-tertiary)",
           boxShadow: "none",
           borderRadius: "4px",
-          overflow: "hidden",
-        },
-        ".cm-tooltip-lint": {
-          backgroundColor: "transparent",
-          border: "none",
-          boxShadow: "none",
-          padding: "0",
           overflow: "hidden",
         },
         ".cm-diagnostic": {
@@ -185,16 +178,23 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
           borderLeft: "4px solid transparent",
         },
         ".cm-diagnostic-error": {
-          borderLeftColor: colors.error,
+          // borderLeftColor: colors.error,
           backgroundColor: colors.errorBg,
         },
         ".cm-diagnostic-warning": {
-          borderLeftColor: colors.warning,
+          // borderLeftColor: colors.warning,
           backgroundColor: colors.warningBg,
         },
         ".cm-diagnostic-info": {
-          borderLeftColor: colors.info,
+          // borderLeftColor: colors.info,
           backgroundColor: colors.infoBg,
+        },
+
+        // Autocomplete styling
+        ".cm-completionDetail": {
+          fontSize: "0.85em",
+          opacity: "0.6",
+          marginLeft: "0.5em",
         },
       },
       { dark: isDark }
