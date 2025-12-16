@@ -104,3 +104,27 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
 }
+
+/* Ghost button hover/active states */
+.ghost-btn {
+  position: relative;
+}
+
+.ghost-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+.ghost-btn:hover::before {
+  opacity: 0.1;
+}
+
+.ghost-btn:active::before {
+  opacity: 0.15;
+}

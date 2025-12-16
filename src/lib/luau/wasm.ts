@@ -531,6 +531,8 @@ function createMockModule(): LuauWasmModule {
         return undefined;
       case 'luau_get_config':
         return JSON.stringify({ mode: 'nonstrict', solver: 'new' });
+      case 'luau_dump_bytecode':
+        return JSON.stringify({ success: true, bytecode: '-- Mock bytecode output\n-- Build WASM to see real bytecode' });
       default:
         return '';
     }
@@ -544,6 +546,34 @@ function createMockModule(): LuauWasmModule {
     stringToUTF8: () => {},
     lengthBytesUTF8: () => 0,
   };
+}
+
+/**
+ * Get bytecode dump for code.
+ */
+export async function getBytecode(
+  code: string,
+  optimizationLevel: number = 1,
+  debugLevel: number = 1,
+  showRemarks: boolean = false
+): Promise<{ success: boolean; bytecode: string; error?: string }> {
+  const module = await loadLuauWasm();
+  
+  try {
+    const resultJson = module.ccall(
+      'luau_dump_bytecode',
+      'string',
+      ['string', 'number', 'number', 'number'],
+      [code, optimizationLevel, debugLevel, showRemarks ? 1 : 0]
+    );
+    return JSON.parse(resultJson);
+  } catch (error) {
+    return {
+      success: false,
+      bytecode: '',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 // Export types

@@ -18,6 +18,7 @@
 #include "Luau/AstQuery.h"
 #include "Luau/Autocomplete.h"
 #include "Luau/BuiltinDefinitions.h"
+#include "Luau/BytecodeBuilder.h"
 #include "Luau/Compiler.h"
 #include "Luau/Config.h"
 #include "Luau/Frontend.h"
@@ -406,6 +407,54 @@ EXPORT const char* luau_compile_check(const char* code) {
     std::ostringstream result;
     result << "{\"success\":true,\"size\":" << bytecodeSize << "}";
     return setResult(result.str());
+}
+
+/**
+ * Dump bytecode as human-readable text.
+ * @param code The Luau source code
+ * @param optimizationLevel 0-2 (default 1)
+ * @param debugLevel 0-2 (default 1)
+ * @param showRemarks Whether to include compiler remarks
+ * Returns: { "success": bool, "bytecode": string, "error": string? }
+ */
+EXPORT const char* luau_dump_bytecode(const char* code, int optimizationLevel, int debugLevel, bool showRemarks) {
+    try {
+        Luau::CompileOptions options;
+        options.optimizationLevel = std::max(0, std::min(2, optimizationLevel));
+        options.debugLevel = std::max(0, std::min(2, debugLevel));
+        
+        // Set up dump flags
+        uint32_t dumpFlags = Luau::BytecodeBuilder::Dump_Code | Luau::BytecodeBuilder::Dump_Lines;
+        if (options.debugLevel >= 2) {
+            dumpFlags |= Luau::BytecodeBuilder::Dump_Locals;
+        }
+        if (showRemarks) {
+            dumpFlags |= Luau::BytecodeBuilder::Dump_Remarks;
+        }
+        
+        Luau::BytecodeBuilder bytecode;
+        bytecode.setDumpFlags(dumpFlags);
+        bytecode.setDumpSource(code);
+        
+        Luau::ParseOptions parseOptions;
+        parseOptions.captureComments = true;
+        
+        Luau::compileOrThrow(bytecode, std::string(code), options, parseOptions);
+        
+        std::string dump = bytecode.dumpEverything();
+        
+        std::ostringstream result;
+        result << "{\"success\":true,\"bytecode\":" << json::string(dump) << "}";
+        return setResult(result.str());
+    } catch (const Luau::CompileError& e) {
+        std::ostringstream result;
+        result << "{\"success\":false,\"bytecode\":\"\",\"error\":" << json::string(e.what()) << "}";
+        return setResult(result.str());
+    } catch (const std::exception& e) {
+        std::ostringstream result;
+        result << "{\"success\":false,\"bytecode\":\"\",\"error\":" << json::string(e.what()) << "}";
+        return setResult(result.str());
+    }
 }
 
 // ============================================================================

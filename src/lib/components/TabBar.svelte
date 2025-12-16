@@ -2,6 +2,7 @@
   import { Button } from '$lib/components/ui/button';
   import ConfigPopover from '$lib/components/ConfigPopover.svelte';
   import { files, activeFile, addFile, removeFile, setActiveFile } from '$lib/stores/playground';
+  import { showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { toggleTheme, themeMode } from '$lib/utils/theme';
   import { runCode, checkCode } from '$lib/luau/wasm';
   import { sharePlayground } from '$lib/utils/share';
@@ -95,6 +96,15 @@
     <ConfigPopover />
     <Button size="sm" variant="ghost" onclick={toggleTheme} class="w-8 sm:w-9">
       {getThemeIcon($themeMode)}
+    </Button>
+    <Button 
+      size="sm" 
+      variant={$showBytecode ? 'default' : 'secondary'} 
+      onclick={toggleBytecode} 
+      class="px-2 sm:px-3"
+    >
+      <span class="hidden sm:inline">Bytecode</span>
+      <span class="sm:hidden font-mono">{'{}'}</span>
     </Button>
     <Button size="sm" variant="secondary" onclick={handleShare} class="px-2 sm:px-3">
       {#if shareSuccess === true}

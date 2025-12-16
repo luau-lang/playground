@@ -74,6 +74,9 @@ export interface LuauWasmModule {
   ccall(name: 'luau_set_solver', returnType: null, argTypes: ['boolean'], args: [boolean]): void;
   ccall(name: 'luau_get_config', returnType: 'string', argTypes: [], args: []): string;
   
+  // Bytecode
+  ccall(name: 'luau_dump_bytecode', returnType: 'string', argTypes: ['string', 'number', 'number', 'number'], args: [string, number, number, number]): string;
+  
   // Memory
   _malloc(size: number): number;
   _free(ptr: number): void;

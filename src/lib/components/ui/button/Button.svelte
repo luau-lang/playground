@@ -8,7 +8,7 @@
       variant: {
         default: 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]',
         secondary: 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]',
-        ghost: 'hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]',
+        ghost: 'ghost-btn hover:text-[var(--text-primary)] text-[var(--text-secondary)]',
         outline: 'border border-[var(--border-color)] bg-transparent hover:bg-[var(--bg-tertiary)]',
       },
       size: {

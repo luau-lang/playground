@@ -2,6 +2,8 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import Editor from '$lib/components/Editor.svelte';
   import Output from '$lib/components/Output.svelte';
+  import BytecodeView from '$lib/components/BytecodeView.svelte';
+  import { showBytecode } from '$lib/stores/settings';
   import { initTheme } from '$lib/utils/theme';
   import { initShare } from '$lib/utils/share';
   import { loadLuauWasm } from '$lib/luau/wasm';
@@ -28,9 +30,20 @@
   <TabBar />
   
   <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
-    <!-- Editor takes remaining space -->
-    <div class="flex-1 min-h-0 overflow-hidden">
-      <Editor />
+    <!-- Editor area (split when bytecode view is open) -->
+    <!-- Vertical split on mobile, horizontal on desktop -->
+    <div class="flex-1 min-h-0 overflow-hidden flex {$showBytecode ? 'flex-col md:flex-row' : ''}">
+      <!-- Editor - takes remaining space -->
+      <div class="min-w-0 min-h-0 overflow-hidden {$showBytecode ? 'h-1/2 md:h-full md:flex-1' : 'h-full w-full'}">
+        <Editor />
+      </div>
+      
+      <!-- Bytecode panel (when visible) - max min(50%, 64ch) on desktop -->
+      {#if $showBytecode}
+        <div class="h-1/2 md:h-full md:w-[min(50%,64ch)] md:shrink-0 min-w-0 min-h-0 overflow-hidden">
+          <BytecodeView />
+        </div>
+      {/if}
     </div>
     
     <!-- Output panel -->
