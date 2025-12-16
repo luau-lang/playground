@@ -47,68 +47,69 @@ interface ThemeColors {
   infoBg: string;
 }
 
+// Colors from design system palette
 const darkColors: ThemeColors = {
   background: "oklch(0.1 0.015 250)",
-  foreground: "oklch(0.9 0.01 250)",
-  selection: "rgba(60, 130, 200, 0.4)",
-  activeLine: "oklch(0.15 0.01 250)",
-  cursor: "oklch(0.6 0.25 270)",
-  lineNumber: "oklch(0.45 0.02 250)",
-  lineNumberActive: "oklch(0.7 0.02 250)",
+  foreground: "rgb(238, 239, 241)", // gray-200
+  selection: "rgba(112, 160, 255, 0.3)", // blue-500
+  activeLine: "rgb(25, 26, 31)", // gray-1100
+  cursor: "rgb(112, 160, 255)", // blue-500
+  lineNumber: "rgb(106, 111, 129)", // gray-600
+  lineNumberActive: "rgb(188, 190, 200)", // gray-500
   gutterBackground: "oklch(0.1 0.015 250)",
-  matchingBracketBg: "oklch(0.25 0.05 160)",
-  matchingBracketOutline: "oklch(0.4 0.1 160)",
+  matchingBracketBg: "rgba(101, 215, 157, 0.2)", // green-400
+  matchingBracketOutline: "rgb(101, 215, 157)", // green-400
 
-  keyword: "oklch(0.75 0.15 300)",
-  string: "oklch(0.7 0.15 140)",
-  number: "oklch(0.75 0.12 70)",
-  comment: "oklch(0.5 0.02 250)",
-  function: "oklch(0.75 0.15 220)",
-  variable: "oklch(0.85 0.05 250)",
-  type: "oklch(0.7 0.15 180)",
-  operator: "oklch(0.7 0.1 50)",
-  punctuation: "oklch(0.65 0.02 250)",
-  bool: "oklch(0.75 0.12 70)",
-  builtin: "oklch(0.75 0.12 200)",
+  keyword: "rgb(112, 160, 255)", // blue-500
+  string: "rgb(101, 215, 157)", // green-400
+  number: "rgb(197, 156, 249)", // purple-500
+  comment: "rgb(106, 111, 129)", // gray-600
+  function: "rgb(255, 155, 192)", // carmine-400
+  variable: "rgb(230, 231, 234)", // gray-300
+  type: "rgb(143, 180, 255)", // blue-400
+  operator: "rgb(255, 155, 192)", // carmine-400
+  punctuation: "rgb(213, 215, 221)", // gray-400
+  bool: "rgb(197, 156, 249)", // purple-500
+  builtin: "rgb(197, 156, 249)", // purple-500
 
-  error: "oklch(0.65 0.2 25)",
-  errorBg: "oklch(0.2 0.08 25)",
-  warning: "oklch(0.75 0.15 85)",
-  warningBg: "oklch(0.2 0.06 85)",
-  info: "oklch(0.65 0.15 220)",
-  infoBg: "oklch(0.15 0.04 220)",
+  error: "rgb(231, 87, 80)", // red-700
+  errorBg: "rgba(231, 87, 80, 0.15)",
+  warning: "rgb(242, 186, 42)", // yellow-400
+  warningBg: "rgba(242, 186, 42, 0.15)",
+  info: "rgb(112, 160, 255)", // blue-500
+  infoBg: "rgba(112, 160, 255, 0.15)",
 };
 
 const lightColors: ThemeColors = {
   background: "#ffffff",
-  foreground: "oklch(0.2 0.02 250)",
-  selection: "rgba(60, 130, 200, 0.25)",
-  activeLine: "oklch(0.97 0.005 250)",
-  cursor: "oklch(0.5 0.28 270)",
-  lineNumber: "oklch(0.6 0.02 250)",
-  lineNumberActive: "oklch(0.3 0.02 250)",
+  foreground: "rgb(39, 41, 48)", // gray-900
+  selection: "rgba(0, 45, 214, 0.15)", // blue-1000
+  activeLine: "rgb(247, 247, 248)", // gray-100
+  cursor: "rgb(0, 45, 214)", // blue-1000
+  lineNumber: "rgb(106, 111, 129)", // gray-600
+  lineNumberActive: "rgb(39, 41, 48)", // gray-900
   gutterBackground: "#ffffff",
-  matchingBracketBg: "oklch(0.85 0.1 160)",
-  matchingBracketOutline: "oklch(0.6 0.15 160)",
+  matchingBracketBg: "rgba(2, 114, 64, 0.15)", // green-900
+  matchingBracketOutline: "rgb(2, 114, 64)", // green-900
 
-  keyword: "oklch(0.45 0.2 300)",
-  string: "oklch(0.45 0.15 140)",
-  number: "oklch(0.5 0.15 50)",
-  comment: "oklch(0.55 0.02 250)",
-  function: "oklch(0.45 0.2 220)",
-  variable: "oklch(0.25 0.02 250)",
-  type: "oklch(0.45 0.15 180)",
-  operator: "oklch(0.45 0.12 50)",
-  punctuation: "oklch(0.4 0.02 250)",
-  bool: "oklch(0.5 0.15 50)",
-  builtin: "oklch(0.45 0.15 200)",
+  keyword: "rgb(0, 45, 214)", // blue-1000
+  string: "rgb(2, 114, 64)", // green-900
+  number: "rgb(108, 33, 198)", // purple-1000
+  comment: "rgb(106, 111, 129)", // gray-600
+  function: "rgb(190, 26, 97)", // carmine-900
+  variable: "rgb(39, 41, 48)", // gray-900
+  type: "rgb(0, 53, 245)", // blue-900
+  operator: "rgb(190, 26, 97)", // carmine-900
+  punctuation: "rgb(53, 55, 65)", // gray-800
+  bool: "rgb(108, 33, 198)", // purple-1000
+  builtin: "rgb(108, 33, 198)", // purple-1000
 
-  error: "oklch(0.55 0.22 25)",
-  errorBg: "oklch(0.97 0.04 25)",
-  warning: "oklch(0.55 0.18 85)",
-  warningBg: "oklch(0.97 0.04 85)",
-  info: "oklch(0.5 0.18 220)",
-  infoBg: "oklch(0.97 0.02 220)",
+  error: "rgb(197, 18, 10)", // red-900
+  errorBg: "rgba(197, 18, 10, 0.08)",
+  warning: "rgb(151, 108, 0)", // yellow-800
+  warningBg: "rgba(151, 108, 0, 0.08)",
+  info: "rgb(0, 45, 214)", // blue-1000
+  infoBg: "rgba(0, 45, 214, 0.08)",
 };
 
 // ============================================================================
