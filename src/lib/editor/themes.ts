@@ -197,6 +197,84 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
           opacity: "0.6",
           marginLeft: "0.5em",
         },
+
+        // Search panel styling
+        ".cm-panels": {
+          backgroundColor: "var(--bg-secondary)",
+          borderTop: "1px solid var(--bg-tertiary)",
+        },
+        ".cm-panels-bottom": {
+          borderTop: "1px solid var(--bg-tertiary)",
+          borderBottom: "none",
+        },
+        ".cm-panel.cm-search": {
+          padding: "8px 12px",
+          fontFamily: "inherit",
+        },
+        // Text input styling - matches buttons
+        ".cm-textfield": {
+          backgroundColor: "var(--bg-editor) !important",
+          border: "1px solid var(--border-color) !important",
+          borderRadius: "6px !important",
+          padding: "6px 12px !important",
+          fontSize: "14px !important",
+          color: "var(--text-primary) !important",
+          outline: "none !important",
+          height: "32px !important",
+          boxSizing: "border-box !important",
+          verticalAlign: "middle !important",
+        },
+        ".cm-textfield:focus": {
+          borderColor: "var(--accent) !important",
+          boxShadow: "0 0 0 1px var(--accent) !important",
+        },
+        // Checkbox styling
+        ".cm-search input[type='checkbox']": {
+          width: "16px !important",
+          height: "16px !important",
+          accentColor: "var(--accent)",
+          cursor: "pointer",
+          margin: "0 !important",
+          verticalAlign: "middle !important",
+        },
+        // Label styling - centered with checkbox
+        ".cm-search label": {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+          color: "var(--text-secondary)",
+          fontSize: "14px",
+          cursor: "pointer",
+          verticalAlign: "middle",
+          height: "32px",
+        },
+        // Button styling - matches Button component secondary variant
+        ".cm-search button": {
+          padding: "6px 12px !important",
+          fontSize: "14px !important",
+          fontWeight: "500",
+          borderRadius: "6px !important",
+          border: "none !important",
+          cursor: "pointer",
+          backgroundImage: "none !important",
+          backgroundColor: "var(--bg-tertiary) !important",
+          color: "var(--text-primary) !important",
+          transition: "background-color 0.15s",
+          height: "32px",
+          boxSizing: "border-box",
+        },
+        ".cm-search button:hover": {
+          backgroundColor: "var(--bg-primary) !important",
+        },
+        ".cm-search button[name='close']": {
+          backgroundColor: "transparent !important",
+          color: "var(--text-secondary)",
+          padding: "4px 8px",
+        },
+        ".cm-search button[name='close']:hover": {
+          backgroundColor: "transparent !important",
+          color: "var(--text-primary)",
+        },
       },
       { dark: isDark }
     ),
