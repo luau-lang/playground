@@ -72,6 +72,9 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     // Theme (dynamic)
     themeCompartment.of(getThemeExtension()),
     
+    // Accessibility
+    EditorView.contentAttributes.of({ 'aria-label': 'Luau code editor' }),
+    
     // Base styling
     EditorView.theme({
       '&': {
