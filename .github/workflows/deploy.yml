@@ -53,7 +53,7 @@ jobs:
           else
             cd wasm/luau
             git fetch origin
-            git reset --hard origin/master
+            git diff --quiet HEAD FETCH_HEAD || git reset --hard FETCH_HEAD
           fi
 
       - name: Build WASM
