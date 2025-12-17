@@ -8,9 +8,8 @@
   "scripts": {
     "dev": "vite",
     "build:wasm": "cd wasm && ./build.sh",
-    "build:embed": "BUILD_EMBED=true vite build",
     "prebuild": "npm run build:wasm",
-    "build": "vite build && npm run build:embed",
+    "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json"
   },
@@ -25,7 +24,6 @@
     "svelte": "^5.43.8",
     "svelte-check": "^4.3.4",
     "tailwindcss": "^4.1.18",
-    "terser": "^5.44.1",
     "typescript": "~5.9.3",
     "vite": "^7.2.4"
   },
