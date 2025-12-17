@@ -4,7 +4,8 @@
   import Output from '$lib/components/Output.svelte';
   import BytecodeView from '$lib/components/BytecodeView.svelte';
   import { showBytecode } from '$lib/stores/settings';
-  import { initTheme } from '$lib/utils/theme';
+  import { isEmbed, embedTheme } from '$lib/stores/embed';
+  import { initTheme, setTheme } from '$lib/utils/theme';
   import { initShare } from '$lib/utils/share';
   import { loadLuauWasm } from '$lib/luau/wasm';
   import { initLuauTextMate } from '$lib/editor/textmate';
@@ -15,7 +16,19 @@
   $effect(() => {
     if (!mounted) {
       mounted = true;
-      initTheme();
+      
+      // In embed mode, apply the embed theme
+      if ($isEmbed) {
+        const theme = $embedTheme;
+        if (theme === 'light' || theme === 'dark') {
+          setTheme(theme);
+        } else {
+          initTheme();
+        }
+      } else {
+        initTheme();
+      }
+      
       initShare();
       // Preload TextMate grammar and WASM module in parallel
       Promise.all([

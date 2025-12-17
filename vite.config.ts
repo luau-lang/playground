@@ -12,15 +12,8 @@ const isEmbedBuild = process.env.BUILD_EMBED === 'true'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    svelte({
-      // For embed build, compile Svelte components for custom elements
-      compilerOptions: isEmbedBuild ? {
-        // Enable custom element mode for components that need it
-        customElement: false, // We handle this manually in the wrapper
-      } : {},
-    }),
-    // Only include Tailwind for the main app build
-    ...(isEmbedBuild ? [] : [tailwindcss()]),
+    svelte(),
+    tailwindcss(),
   ],
   resolve: {
     alias: {
@@ -28,32 +21,28 @@ export default defineConfig({
     },
   },
   build: isEmbedBuild ? {
-    // Embed build configuration
+    // Embed build configuration - tiny JS file that creates iframes
     lib: {
       entry: path.resolve(__dirname, 'src/embed/index.ts'),
       name: 'LuauEmbed',
-      formats: ['es'],
-      fileName: () => 'embed/luau-embed.js',
+      formats: ['es', 'iife'],
+      fileName: (format) => format === 'es' ? 'embed/luau-embed.js' : 'embed/luau-embed.iife.js',
     },
     outDir: 'dist',
     emptyOutDir: false, // Don't clear dist since main app was built first
-    sourcemap: true,
-    minify: 'terser', // Enable terser for compact output
+    sourcemap: false, // No need for sourcemaps on tiny embed
+    minify: 'terser',
     terserOptions: {
       format: {
         comments: false,
       },
-      compress: {
-        drop_console: false, // Keep console for debugging
-      },
     },
-    copyPublicDir: false, // Don't copy public assets for embed build
+    copyPublicDir: false,
     rollupOptions: {
-      // Don't externalize anything - bundle everything for standalone use
-      external: [],
+      external: [], // Bundle lz-string
       output: {
-        // Ensure CSS is inlined (handled via ?inline import)
-        inlineDynamicImports: true,
+        // For IIFE, expose globally
+        name: 'LuauEmbed',
       },
     },
   } : {

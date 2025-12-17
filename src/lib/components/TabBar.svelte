@@ -5,7 +5,8 @@
   import { showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { toggleTheme, themeMode } from '$lib/utils/theme';
   import { runCode, checkCode } from '$lib/luau/wasm';
-  import { sharePlayground } from '$lib/utils/share';
+  import { sharePlayground, generatePlaygroundUrl } from '$lib/utils/share';
+  import { isEmbed } from '$lib/stores/embed';
 
   let newFileName = $state('');
   let showNewFileInput = $state(false);
@@ -41,6 +42,11 @@
     if (mode === 'light') return '☀';
     return '☾';
   }
+
+  function handleOpenInPlayground() {
+    const url = generatePlaygroundUrl($files, $activeFile);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 </script>
 
 <header class="relative flex items-end gap-1 px-2 pt-1.5 pb-0 bg-[var(--bg-secondary)] min-h-[44px]">
@@ -61,7 +67,7 @@
         onkeydown={(e) => e.key === 'Enter' && setActiveFile(fileName)}
       >
         <span class="truncate max-w-[80px] sm:max-w-[120px]">{fileName}</span>
-        {#if Object.keys($files).length > 1}
+        {#if Object.keys($files).length > 1 && !$isEmbed}
           <button
             class="opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-[var(--color-error-500)] ml-1 text-xs p-1 -m-1"
             onclick={(e) => { e.stopPropagation(); removeFile(fileName); }}
@@ -73,49 +79,53 @@
       </div>
     {/each}
 
-    <!-- Add file button -->
-    {#if showNewFileInput}
-      <form class="flex items-center gap-1 ml-1 shrink-0 mb-1" onsubmit={(e) => { e.preventDefault(); handleAddFile(); }}>
-        <input
-          type="text"
-          class="w-20 sm:w-24 px-2 py-1 text-sm bg-[var(--bg-editor)] border border-[var(--border-color)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-          placeholder="filename"
-          bind:value={newFileName}
-          autofocus
-        />
-        <Button size="sm" variant="ghost" type="submit">✓</Button>
-        <Button size="sm" variant="ghost" onclick={() => showNewFileInput = false}>×</Button>
-      </form>
-    {:else}
-      <Button size="sm" variant="ghost" onclick={() => showNewFileInput = true} class="shrink-0 mb-1">+</Button>
+    <!-- Add file button (hidden in embed mode) -->
+    {#if !$isEmbed}
+      {#if showNewFileInput}
+        <form class="flex items-center gap-1 ml-1 shrink-0 mb-1" onsubmit={(e) => { e.preventDefault(); handleAddFile(); }}>
+          <input
+            type="text"
+            class="w-20 sm:w-24 px-2 py-1 text-sm bg-[var(--bg-editor)] border border-[var(--border-color)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+            placeholder="filename"
+            bind:value={newFileName}
+            autofocus
+          />
+          <Button size="sm" variant="ghost" type="submit">✓</Button>
+          <Button size="sm" variant="ghost" onclick={() => showNewFileInput = false}>×</Button>
+        </form>
+      {:else}
+        <Button size="sm" variant="ghost" onclick={() => showNewFileInput = true} class="shrink-0 mb-1">+</Button>
+      {/if}
     {/if}
   </div>
 
   <!-- Actions - responsive sizing -->
   <div class="flex items-center gap-0.5 sm:gap-1 shrink-0 mb-1">
-    <ConfigPopover />
-    <Button size="sm" variant="ghost" onclick={toggleTheme} class="w-8 sm:w-9">
-      {getThemeIcon($themeMode)}
-    </Button>
-    <Button 
-      size="sm" 
-      variant={$showBytecode ? 'default' : 'secondary'} 
-      onclick={toggleBytecode} 
-      class="px-2 sm:px-3"
-    >
-      <span class="hidden sm:inline">Bytecode</span>
-      <span class="sm:hidden font-mono">{'{}'}</span>
-    </Button>
-    <Button size="sm" variant="secondary" onclick={handleShare} class="px-2 sm:px-3">
-      {#if shareSuccess === true}
-        ✓
-      {:else if shareSuccess === false}
-        URL ↗
-      {:else}
-        <span class="hidden sm:inline">Share</span>
-        <span class="sm:hidden">↗</span>
-      {/if}
-    </Button>
+    {#if !$isEmbed}
+      <ConfigPopover />
+      <Button size="sm" variant="ghost" onclick={toggleTheme} class="w-8 sm:w-9">
+        {getThemeIcon($themeMode)}
+      </Button>
+      <Button 
+        size="sm" 
+        variant={$showBytecode ? 'default' : 'secondary'} 
+        onclick={toggleBytecode} 
+        class="px-2 sm:px-3"
+      >
+        <span class="hidden sm:inline">Bytecode</span>
+        <span class="sm:hidden font-mono">{'{}'}</span>
+      </Button>
+      <Button size="sm" variant="secondary" onclick={handleShare} class="px-2 sm:px-3">
+        {#if shareSuccess === true}
+          ✓
+        {:else if shareSuccess === false}
+          URL ↗
+        {:else}
+          <span class="hidden sm:inline">Share</span>
+          <span class="sm:hidden">↗</span>
+        {/if}
+      </Button>
+    {/if}
     <Button size="sm" variant="secondary" onclick={handleCheck} class="px-2 sm:px-3">
       <span class="hidden sm:inline">Check</span>
       <span class="sm:hidden">✓</span>
@@ -124,6 +134,12 @@
       <span class="sm:mr-1">▶</span>
       <span class="hidden sm:inline">Run</span>
     </Button>
+    {#if $isEmbed}
+      <Button size="sm" variant="secondary" onclick={handleOpenInPlayground} class="px-2 sm:px-3">
+        <span class="hidden sm:inline">Open ↗</span>
+        <span class="sm:hidden">↗</span>
+      </Button>
+    {/if}
   </div>
 </header>
 

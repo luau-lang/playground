@@ -232,3 +232,201 @@ export function refreshDiagnostics(): void {
     });
   }
 }
+
+// ============================================================================
+// Standalone Editor Instance (for embeds and multiple editors)
+// ============================================================================
+
+export interface StandaloneEditorOptions {
+  container: HTMLElement;
+  content: string;
+  onChange?: (content: string) => void;
+  theme?: 'light' | 'dark' | 'auto';
+  readonly?: boolean;
+}
+
+export interface StandaloneEditor {
+  view: EditorView;
+  getContent: () => string;
+  setContent: (content: string) => void;
+  setTheme: (theme: 'light' | 'dark' | 'auto') => void;
+  destroy: () => void;
+}
+
+/**
+ * Create a standalone editor instance.
+ * Unlike createEditor(), this doesn't use global state and can create multiple instances.
+ */
+export function createStandaloneEditor(options: StandaloneEditorOptions): StandaloneEditor {
+  const { container, content, onChange, theme = 'auto', readonly = false } = options;
+  
+  const standaloneThemeCompartment = new Compartment();
+  const readonlyCompartment = new Compartment();
+  
+  function getStandaloneTheme(themeOption: 'light' | 'dark' | 'auto'): Extension {
+    const isDark = themeOption === 'dark' || 
+      (themeOption === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    return isDark ? darkTheme : lightTheme;
+  }
+  
+  const extensions: Extension[] = [
+    // Basic setup
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    highlightSpecialChars(),
+    history(),
+    foldGutter(),
+    drawSelection(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    bracketMatching(),
+    closeBrackets(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    
+    // Keymaps
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      indentWithTab,
+    ]),
+    
+    // Luau language support (TextMate grammar)
+    luauTextMate(),
+    
+    // LSP-like features (diagnostics, autocomplete, hover)
+    ...luauLspExtensions(),
+    
+    // Theme (dynamic)
+    standaloneThemeCompartment.of(getStandaloneTheme(theme)),
+    
+    // Readonly state
+    readonlyCompartment.of(EditorState.readOnly.of(readonly)),
+    
+    // Accessibility
+    EditorView.contentAttributes.of({ 'aria-label': 'Luau code editor' }),
+    
+    // Base styling
+    EditorView.theme({
+      '&': {
+        height: '100%',
+        fontSize: '14px',
+      },
+      '.cm-scroller': {
+        fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace)',
+        overflow: 'auto',
+      },
+      '.cm-content': {
+        padding: '12px 0',
+      },
+      '.cm-gutters': {
+        paddingLeft: '8px',
+      },
+    }),
+  ];
+  
+  // Add change listener if provided
+  if (onChange) {
+    extensions.push(
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          onChange(update.state.doc.toString());
+        }
+      })
+    );
+  }
+  
+  const state = EditorState.create({
+    doc: content,
+    extensions,
+  });
+  
+  const view = new EditorView({
+    state,
+    parent: container,
+  });
+  
+  // Listen for system theme changes when using auto
+  let mediaQueryCleanup: (() => void) | null = null;
+  let currentTheme = theme;
+  
+  if (theme === 'auto') {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      view.dispatch({
+        effects: standaloneThemeCompartment.reconfigure(getStandaloneTheme('auto')),
+      });
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    mediaQueryCleanup = () => mediaQuery.removeEventListener('change', handleChange);
+  }
+  
+  // Register callback to refresh highlighting when grammar loads
+  onGrammarReady(() => {
+    if (view) {
+      const currentContent = view.state.doc.toString();
+      view.dispatch({
+        changes: { from: 0, to: currentContent.length, insert: currentContent + ' ' },
+      });
+      view.dispatch({
+        changes: { from: currentContent.length, to: currentContent.length + 1 },
+      });
+    }
+  });
+  
+  return {
+    view,
+    
+    getContent(): string {
+      return view.state.doc.toString();
+    },
+    
+    setContent(newContent: string): void {
+      const currentContent = view.state.doc.toString();
+      if (currentContent !== newContent) {
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: currentContent.length,
+            insert: newContent,
+          },
+        });
+      }
+    },
+    
+    setTheme(newTheme: 'light' | 'dark' | 'auto'): void {
+      currentTheme = newTheme;
+      view.dispatch({
+        effects: standaloneThemeCompartment.reconfigure(getStandaloneTheme(newTheme)),
+      });
+      
+      // Update media query listener
+      if (mediaQueryCleanup) {
+        mediaQueryCleanup();
+        mediaQueryCleanup = null;
+      }
+      
+      if (newTheme === 'auto') {
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const handleChange = () => {
+          view.dispatch({
+            effects: standaloneThemeCompartment.reconfigure(getStandaloneTheme('auto')),
+          });
+        };
+        mediaQuery.addEventListener('change', handleChange);
+        mediaQueryCleanup = () => mediaQuery.removeEventListener('change', handleChange);
+      }
+    },
+    
+    destroy(): void {
+      if (mediaQueryCleanup) {
+        mediaQueryCleanup();
+      }
+      view.destroy();
+    },
+  };
+}

@@ -52,3 +52,11 @@ export function toggleTheme() {
   });
 }
 
+/**
+ * Set a specific theme (used by embed mode).
+ */
+export function setTheme(mode: ThemeMode) {
+  themeMode.set(mode);
+  applyTheme(mode);
+}
+

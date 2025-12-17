@@ -1,27 +1,36 @@
 /**
- * Luau Embed - Custom Elements Entry Point
+ * Luau Embed - Lightweight iframe-based web component
  * 
- * Registers <luau-embed> and <luau-file> custom elements for embedding
- * Luau playgrounds in documentation sites.
+ * Creates an iframe pointing to play.luau.org with embed mode enabled.
+ * This gives full playground functionality with minimal bundle size.
  */
 
-import { mount } from 'svelte';
-import EmbedPlayground from './EmbedPlayground.svelte';
-import embedStyles from './styles.css?inline';
+import LZString from 'lz-string';
+
+const PLAYGROUND_URL = 'https://play.luau.org';
+
+interface ShareState {
+  files: Record<string, string>;
+  active: string;
+  v: number;
+}
+
+/**
+ * Encode files to URL-safe format (same as main playground)
+ */
+function encodeFiles(files: Record<string, string>, activeFile: string): string {
+  const state: ShareState = {
+    files,
+    active: activeFile,
+    v: 1,
+  };
+  return LZString.compressToEncodedURIComponent(JSON.stringify(state));
+}
 
 /**
  * <luau-file> - Defines a file within a <luau-embed>
- * 
- * Attributes:
- * - name: File name (e.g., "main.luau")
- * 
- * Content: Raw Luau code as text content
  */
 class LuauFile extends HTMLElement {
-  static get observedAttributes() {
-    return ['name'];
-  }
-  
   get name(): string {
     return this.getAttribute('name') || 'main.luau';
   }
@@ -32,65 +41,69 @@ class LuauFile extends HTMLElement {
 }
 
 /**
- * <luau-embed> - Container for embeddable Luau playground
+ * <luau-embed> - Embeds a Luau playground via iframe
  * 
  * Attributes:
- * - active: Initially active file (defaults to first file)
- * - readonly: Disable editing
- * - theme: "light" | "dark" | "auto" (defaults to "auto")
- * - height: Editor height (defaults to "300px")
+ * - height: iframe height (default: "400px")
+ * - theme: "light" | "dark" | "auto" (default: "auto")
+ * - base-url: Override the playground URL (for local testing)
  */
 class LuauEmbed extends HTMLElement {
-  private component: ReturnType<typeof mount> | null = null;
-  private shadowRoot_: ShadowRoot | null = null;
+  private iframe: HTMLIFrameElement | null = null;
   
   static get observedAttributes() {
-    return ['active', 'readonly', 'theme', 'height'];
+    return ['height', 'theme', 'base-url'];
   }
   
   connectedCallback() {
-    // Parse <luau-file> children to extract files
-    const files = this.parseFiles();
-    
-    // Get attributes
-    const active = this.getAttribute('active') || Object.keys(files)[0] || 'main.luau';
-    const readonly = this.hasAttribute('readonly');
-    const theme = (this.getAttribute('theme') as 'light' | 'dark' | 'auto') || 'auto';
-    const height = this.getAttribute('height') || '300px';
-    
-    // Create Shadow DOM for style isolation
-    this.shadowRoot_ = this.attachShadow({ mode: 'open' });
-    
-    // Inject styles
-    const styleEl = document.createElement('style');
-    styleEl.textContent = embedStyles;
-    this.shadowRoot_.appendChild(styleEl);
-    
-    // Create mount point
-    const container = document.createElement('div');
-    container.className = 'luau-embed-container';
-    this.shadowRoot_.appendChild(container);
-    
-    // Mount Svelte component
-    this.component = mount(EmbedPlayground, {
-      target: container,
-      props: {
-        files,
-        activeFile: active,
-        readonly,
-        theme,
-        height,
-      },
-    });
-    
-    // Hide the original content (the <luau-file> elements)
-    this.style.display = 'contents';
+    this.render();
   }
   
   disconnectedCallback() {
-    // Svelte 5 mount doesn't return an unmount function directly
-    // The component will be cleaned up when the shadow DOM is removed
-    this.component = null;
+    this.iframe = null;
+  }
+  
+  attributeChangedCallback() {
+    if (this.iframe) {
+      this.render();
+    }
+  }
+  
+  private render() {
+    // Parse files from <luau-file> children
+    const files = this.parseFiles();
+    const activeFile = Object.keys(files)[0] || 'main.luau';
+    
+    // Get attributes
+    const height = this.getAttribute('height') || '400px';
+    const theme = this.getAttribute('theme') || 'auto';
+    const baseUrl = this.getAttribute('base-url') || PLAYGROUND_URL;
+    
+    // Build iframe URL
+    const encoded = encodeFiles(files, activeFile);
+    const url = `${baseUrl}/?embed=true&theme=${theme}#code=${encoded}`;
+    
+    // Hide the <luau-file> children
+    const fileElements = this.querySelectorAll('luau-file');
+    fileElements.forEach(el => {
+      (el as HTMLElement).style.display = 'none';
+    });
+    
+    // Create or update iframe
+    if (!this.iframe) {
+      this.iframe = document.createElement('iframe');
+      this.iframe.style.border = 'none';
+      this.iframe.style.width = '100%';
+      this.iframe.style.borderRadius = '6px';
+      this.iframe.setAttribute('loading', 'lazy');
+      this.iframe.setAttribute('allowfullscreen', '');
+      this.iframe.setAttribute('allow', 'clipboard-write');
+      this.appendChild(this.iframe);
+    }
+    
+    this.iframe.src = url;
+    this.iframe.style.height = height;
+    this.iframe.title = 'Luau Playground';
   }
   
   private parseFiles(): Record<string, string> {
@@ -99,12 +112,10 @@ class LuauEmbed extends HTMLElement {
     
     fileElements.forEach((el) => {
       const name = el.getAttribute('name') || 'main.luau';
-      // Get the text content, trimming leading/trailing whitespace
       const code = el.textContent?.trim() || '';
       files[name] = code;
     });
     
-    // If no files were found, create a default empty file
     if (Object.keys(files).length === 0) {
       files['main.luau'] = '-- Write your Luau code here\n';
     }
@@ -123,4 +134,3 @@ if (!customElements.get('luau-embed')) {
 }
 
 export { LuauEmbed, LuauFile };
-
