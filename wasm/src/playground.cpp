@@ -470,9 +470,9 @@ EXPORT const char* luau_dump_bytecode(const char* code, int optimizationLevel, i
         
         Luau::compileOrThrow(bytecode, std::string(code), options, parseOptions);
         
-        Luau::CodeGen::AssemblyOptions options;
-        options.annotator = annotateInstruction;
-        options.annotatorContext = &bcb;
+        Luau::CodeGen::AssemblyOptions asmOptions;
+        asmOptions.annotator = annotateInstruction;
+        asmOptions.annotatorContext = &bytecode;
 
         std::string dump;
 
@@ -482,31 +482,32 @@ EXPORT const char* luau_dump_bytecode(const char* code, int optimizationLevel, i
             dump = bytecode.dumpEverything();
             break;
         case 1:
-            options.target = Luau::CodeGen::AssemblyOptions::Host;
-            options.outputBinary = false;
-            options.includeAssembly = false;
-            options.includeIr = true;
-            options.includeIrTypes = false;
-            options.includeOutlinedCode = false;
-            dump = getCodegenAssembly(name, bytecode.getBytecode(), options, nullptr);
+            // Use X64_SystemV for IR since we're in WASM (Host won't work)
+            asmOptions.target = Luau::CodeGen::AssemblyOptions::X64_SystemV;
+            asmOptions.outputBinary = false;
+            asmOptions.includeAssembly = false;
+            asmOptions.includeIr = true;
+            asmOptions.includeIrTypes = false;
+            asmOptions.includeOutlinedCode = false;
+            dump = getCodegenAssembly("main", bytecode.getBytecode(), asmOptions, nullptr);
             break;
         case 2:
-            options.target = Luau::CodeGen::AssemblyOptions::X64_SystemV;
-            options.outputBinary = false;
-            options.includeAssembly = true;
-            options.includeIr = true;
-            options.includeIrTypes = false;
-            options.includeOutlinedCode = false;
-            dump = getCodegenAssembly(name, bytecode.getBytecode(), options, nullptr);
+            asmOptions.target = Luau::CodeGen::AssemblyOptions::X64_SystemV;
+            asmOptions.outputBinary = false;
+            asmOptions.includeAssembly = true;
+            asmOptions.includeIr = true;
+            asmOptions.includeIrTypes = false;
+            asmOptions.includeOutlinedCode = false;
+            dump = getCodegenAssembly("main", bytecode.getBytecode(), asmOptions, nullptr);
             break;
         case 3:
-            options.target = Luau::CodeGen::AssemblyOptions::A64;
-            options.outputBinary = false;
-            options.includeAssembly = true;
-            options.includeIr = true;
-            options.includeIrTypes = false;
-            options.includeOutlinedCode = false;
-            dump = getCodegenAssembly(name, bytecode.getBytecode(), options, nullptr);
+            asmOptions.target = Luau::CodeGen::AssemblyOptions::A64;
+            asmOptions.outputBinary = false;
+            asmOptions.includeAssembly = true;
+            asmOptions.includeIr = true;
+            asmOptions.includeIrTypes = false;
+            asmOptions.includeOutlinedCode = false;
+            dump = getCodegenAssembly("main", bytecode.getBytecode(), asmOptions, nullptr);
             break;
 
         default:

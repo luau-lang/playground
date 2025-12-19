@@ -103,7 +103,7 @@
     error = null;
     
     try {
-      const result = await getBytecode(code, optimizationLevel, debugLevel, showRemarks, outputFormat);
+      const result = await getBytecode(code, optimizationLevel, debugLevel, outputFormat, showRemarks);
       if (result.success) {
         bytecodeContent = result.bytecode;
         parsedFunctions = parseBytecode(result.bytecode);
