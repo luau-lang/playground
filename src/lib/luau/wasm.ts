@@ -69,10 +69,8 @@ export async function loadLuauWasm(): Promise<LuauWasmModule> {
       
       return module;
     } catch (error) {
-      console.warn('[Luau WASM] Failed to load module, using mock:', error);
-      // Return mock module for development
-      wasmModule = createMockModule();
-      return wasmModule;
+      modulePromise = null;
+      throw new Error('Failed to load Luau WASM module', { cause: error });
     }
   })();
 
@@ -430,118 +428,6 @@ export async function checkCode(): Promise<void> {
   } finally {
     setRunning(false);
   }
-}
-
-// ============================================================================
-// Mock Module for Development (when WASM isn't built yet)
-// ============================================================================
-
-function createMockModule(): LuauWasmModule {
-  const mockExecute = (code: string): string => {
-    // Simple mock that extracts print statements
-    const printRegex = /print\s*\(([^)]+)\)/g;
-    const outputs: string[] = [];
-    let match;
-    
-    while ((match = printRegex.exec(code)) !== null) {
-      const args = match[1];
-      // Handle string literals
-      const stringMatch = args.match(/"([^"]*)"|'([^']*)'/);
-      if (stringMatch) {
-        outputs.push(stringMatch[1] || stringMatch[2]);
-      } else {
-        // Handle simple expressions
-        outputs.push(`[${args.trim()}]`);
-      }
-    }
-
-    if (outputs.length === 0) {
-      return JSON.stringify({ 
-        success: true, 
-        output: '[Mock mode - WASM not loaded]\nTip: Build the WASM module with ./wasm/build.sh' 
-      });
-    }
-
-    return JSON.stringify({ success: true, output: outputs.join('\n') });
-  };
-
-  const mockDiagnostics = (): string => {
-    return JSON.stringify({ diagnostics: [] });
-  };
-
-  const mockAutocomplete = (): string => {
-    // Return some basic Luau globals
-    const items: LuauCompletion[] = [
-      { label: 'print', kind: 'function', detail: '(...any) -> ()', deprecated: false },
-      { label: 'pairs', kind: 'function', detail: '<K, V>(t: {[K]: V}) -> ((t: {[K]: V}, k: K?) -> (K, V), {[K]: V}, nil)', deprecated: false },
-      { label: 'ipairs', kind: 'function', detail: '<V>(t: {V}) -> ((t: {V}, i: number) -> (number, V), {V}, number)', deprecated: false },
-      { label: 'type', kind: 'function', detail: '(any) -> string', deprecated: false },
-      { label: 'tostring', kind: 'function', detail: '(any) -> string', deprecated: false },
-      { label: 'tonumber', kind: 'function', detail: '(any, number?) -> number?', deprecated: false },
-      { label: 'local', kind: 'keyword', deprecated: false },
-      { label: 'function', kind: 'keyword', deprecated: false },
-      { label: 'if', kind: 'keyword', deprecated: false },
-      { label: 'then', kind: 'keyword', deprecated: false },
-      { label: 'else', kind: 'keyword', deprecated: false },
-      { label: 'for', kind: 'keyword', deprecated: false },
-      { label: 'while', kind: 'keyword', deprecated: false },
-      { label: 'return', kind: 'keyword', deprecated: false },
-    ];
-    return JSON.stringify({ items });
-  };
-
-  const mockHover = (): string => {
-    return JSON.stringify({ content: null });
-  };
-
-  // Create a mock ccall that routes to the appropriate mock function
-  const ccall = (name: string, _returnType: string | null, _argTypes: string[], args: unknown[]): unknown => {
-    switch (name) {
-      case 'luau_execute':
-        return mockExecute(args[0] as string);
-      case 'luau_compile_check':
-        return JSON.stringify({ success: true, size: 100 });
-      case 'luau_reset':
-        return undefined;
-      case 'luau_add_module':
-        return undefined;
-      case 'luau_clear_modules':
-        return undefined;
-      case 'luau_get_modules':
-        return JSON.stringify({ modules: [] });
-      case 'luau_set_source':
-        return undefined;
-      case 'luau_get_diagnostics':
-        return mockDiagnostics();
-      case 'luau_autocomplete':
-        return mockAutocomplete();
-      case 'luau_hover':
-        return mockHover();
-      case 'luau_signature_help':
-        return JSON.stringify({ signatures: [] });
-      case 'luau_version':
-        return 'mock-1.0.0';
-      case 'luau_set_mode':
-        return undefined;
-      case 'luau_set_solver':
-        return undefined;
-      case 'luau_get_config':
-        return JSON.stringify({ mode: 'nonstrict', solver: 'new' });
-      case 'luau_dump_bytecode':
-        return JSON.stringify({ success: true, bytecode: '-- Mock bytecode output\n-- Build WASM to see real bytecode' });
-      default:
-        return '';
-    }
-  };
-
-  return {
-    ccall: ccall as unknown as LuauWasmModule['ccall'],
-    _malloc: () => 0,
-    _free: () => {},
-    UTF8ToString: () => '',
-    stringToUTF8: () => {},
-    lengthBytesUTF8: () => 0,
-  };
 }
 
 /**
