@@ -29,52 +29,81 @@
 
   function parseLines(raw: string): ParsedLine[] {
     const lines = raw.split('\n');
-    return lines.map(line => {
+    const result: ParsedLine[] = [];
+    let currentSourceLine: number | null = null;
+    
+    for (const line of lines) {
       const trimmed = line.trim();
       
-      // Empty line
+      // Empty line - reset context
       if (!trimmed) {
-        return { raw: line, sourceLine: null, type: 'empty' as const };
+        result.push({ raw: line, sourceLine: null, type: 'empty' as const });
+        continue;
       }
 
       // VM bytecode line: starts with "N: " where N is line number
       // e.g., "5: LOADK R2 K0 ['Hello']" or "14: L0: ADD R2 R2 R7"
       const bytecodeMatch = trimmed.match(/^(\d+):\s/);
       if (bytecodeMatch) {
-        return { 
+        currentSourceLine = parseInt(bytecodeMatch[1], 10);
+        result.push({ 
           raw: line, 
-          sourceLine: parseInt(bytecodeMatch[1], 10),
+          sourceLine: currentSourceLine,
           type: 'bytecode' as const
-        };
+        });
+        continue;
       }
 
-      // Function header (VM format): "Function N (name):"
+      // Function header (VM format): "Function N (name):" - reset context
       if (trimmed.match(/^Function\s+\d+\s*\([^)]*\)\s*:?$/)) {
-        return { raw: line, sourceLine: null, type: 'func-header' as const };
+        currentSourceLine = null;
+        result.push({ raw: line, sourceLine: null, type: 'func-header' as const });
+        continue;
       }
 
-      // IR/ASM function header: "; function name() line N"
+      // IR/ASM function header: "; function name() line N" - reset context
       if (trimmed.match(/^;\s*function\s/)) {
-        return { raw: line, sourceLine: null, type: 'func-header' as const };
+        currentSourceLine = null;
+        result.push({ raw: line, sourceLine: null, type: 'func-header' as const });
+        continue;
       }
 
-      // IR comment lines starting with #
+      // Block header: "# bb_name:" - reset context (new block)
+      if (trimmed.match(/^#\s*bb_\w+:/)) {
+        currentSourceLine = null;
+        result.push({ raw: line, sourceLine: null, type: 'ir-comment' as const });
+        continue;
+      }
+
+      // IR comment lines starting with # - inherit current source line
       if (trimmed.startsWith('#')) {
-        return { raw: line, sourceLine: null, type: 'ir-comment' as const };
+        result.push({ raw: line, sourceLine: currentSourceLine, type: 'ir-comment' as const });
+        continue;
       }
 
-      // Comment lines starting with ;
+      // Block metadata comments (successors, predecessors, in/out regs) - no source line
+      if (trimmed.match(/^;\s*(successors|predecessors|in regs|out regs):/)) {
+        result.push({ raw: line, sourceLine: null, type: 'comment' as const });
+        continue;
+      }
+
+      // Comment lines starting with ; - no source line context
       if (trimmed.startsWith(';')) {
-        return { raw: line, sourceLine: null, type: 'comment' as const };
+        result.push({ raw: line, sourceLine: null, type: 'comment' as const });
+        continue;
       }
 
-      // Assembly labels (.L11:) or instructions
+      // Assembly labels (.L11:) and instructions - inherit current source line
+      // Labels are just internal jump targets, not boundaries between source lines
       if (trimmed.startsWith('.') || trimmed.match(/^[a-z]/i)) {
-        return { raw: line, sourceLine: null, type: 'asm' as const };
+        result.push({ raw: line, sourceLine: currentSourceLine, type: 'asm' as const });
+        continue;
       }
 
-      return { raw: line, sourceLine: null, type: 'other' as const };
-    });
+      result.push({ raw: line, sourceLine: currentSourceLine, type: 'other' as const });
+    }
+    
+    return result;
   }
 
   // Highlight IR instruction arguments
