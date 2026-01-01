@@ -111,7 +111,7 @@
   <div class="absolute bottom-0 left-0 right-0 h-px bg-(--border-color)"></div>
   
   <!-- File tabs - scrollable on mobile -->
-  <div class="flex items-end gap-0.5 flex-1 overflow-x-auto scrollbar-hide">
+  <div class="flex items-end gap-0.5 flex-1 overflow-x-auto overflow-y-hidden scrollbar-hide">
     {#each Object.keys($files) as fileName}
       <div
         class="group relative flex items-center gap-1 px-2 sm:px-3 py-1.5 text-sm leading-5 rounded-t-md transition-colors cursor-pointer shrink-0 select-none border-t border-x
@@ -148,7 +148,7 @@
         {/if}
         {#if Object.keys($files).length > 1 && !$isEmbed && editingFileName !== fileName}
           <button
-            class="opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-error-500 ml-1 p-1 -m-1"
+            class="opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-error-500 ml-1 p-1 -m-1 cursor-pointer"
             onclick={(e) => { e.stopPropagation(); removeFile(fileName); }}
             aria-label="Close tab"
           >
