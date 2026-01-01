@@ -355,7 +355,11 @@ export async function runCode(): Promise<void> {
     
     setExecutionTime(elapsed);
     
-    if (result.output) {
+    if (result.prints && result.prints.length > 0) {
+      result.prints.forEach((values) => {
+        appendOutput({ type: 'log', text: '', values });
+      });
+    } else if (result.output) {
       result.output.split('\n').forEach((line) => {
         appendOutput({ type: 'log', text: line });
       });

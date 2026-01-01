@@ -4,9 +4,21 @@
  * Shared helpers for formatting execution output and timing.
  */
 
+export type LuauValue = 
+  | { type: 'nil' }
+  | { type: 'boolean'; value: boolean }
+  | { type: 'number'; value: number }
+  | { type: 'string'; value: string }
+  | { type: 'table'; value: Record<string, LuauValue> | LuauValue[]; isArray: boolean }
+  | { type: 'function' }
+  | { type: 'userdata' }
+  | { type: 'thread' }
+  | { type: 'circular' };
+
 export interface OutputLine {
   type: 'log' | 'error' | 'warn';
   text: string;
+  values?: LuauValue[];
 }
 
 /**

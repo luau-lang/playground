@@ -2,6 +2,8 @@
  * Luau WASM Module Types
  */
 
+import type { LuauValue } from '$lib/utils/output';
+
 export interface LuauDiagnostic {
   severity: 'error' | 'warning' | 'info';
   message: string;
@@ -21,6 +23,7 @@ export interface LuauCompletion {
 export interface ExecuteResult {
   success: boolean;
   output: string;
+  prints?: LuauValue[][];
   error?: string;
 }
 

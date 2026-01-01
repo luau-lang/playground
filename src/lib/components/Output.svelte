@@ -4,6 +4,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Icon } from '$lib/icons';
   import { formatTime, isStackTraceLine, formatStackLine } from '$lib/utils/output';
+  import ObjectView from './ObjectView.svelte';
 
   // In embed mode: collapsed by default, smaller when expanded
   // In normal mode: expanded by default
@@ -76,15 +77,24 @@
       {:else}
         {#each $output as line, i}
           {@const isStack = line.type === 'error' && isStackTraceLine(line.text)}
-          <div 
-            class="leading-relaxed break-all
-              {isStack ? 'pl-4 opacity-80 text-error-500' : ''}
-              {line.type === 'error' && !isStack ? 'text-error-500' : ''}
-              {line.type === 'warn' ? 'text-warning-500' : ''}
-              {line.type === 'log' ? 'text-(--text-primary)' : ''}"
-          >
-            {isStack ? formatStackLine(line.text) : line.text}
-          </div>
+          {#if line.values && line.values.length > 0}
+            <!-- Structured output with interactive object view -->
+            <div class="leading-relaxed flex flex-wrap gap-x-4 gap-y-1">
+              {#each line.values as value, j}
+                <ObjectView {value} isTopLevel={true} />
+              {/each}
+            </div>
+          {:else}
+            <div 
+              class="leading-relaxed break-all
+                {isStack ? 'pl-4 opacity-80 text-error-500' : ''}
+                {line.type === 'error' && !isStack ? 'text-error-500' : ''}
+                {line.type === 'warn' ? 'text-warning-500' : ''}
+                {line.type === 'log' ? 'text-(--text-primary)' : ''}"
+            >
+              {isStack ? formatStackLine(line.text) : line.text}
+            </div>
+          {/if}
         {/each}
       {/if}
     </div>

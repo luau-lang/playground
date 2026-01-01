@@ -108,9 +108,154 @@ const char* setResult(std::string result) {
 // Execution: Luau VM
 // ============================================================================
 
-// Custom print function that captures output
+static void serializeValueToJson(lua_State* L, int idx, std::string& out, std::vector<const void*>& seen);
+
+static void serializeTableToJson(lua_State* L, int idx, std::string& out, std::vector<const void*>& seen) {
+    if (idx < 0) idx = lua_gettop(L) + idx + 1;
+    
+    const void* ptr = lua_topointer(L, idx);
+    for (const void* seenPtr : seen) {
+        if (seenPtr == ptr) {
+            out += "{\"type\":\"circular\"}";
+            return;
+        }
+    }
+    seen.push_back(ptr);
+    
+    bool hasElements = false;
+    bool isArray = true;
+    int arrayIndex = 1;
+    
+    lua_pushnil(L);
+    while (lua_next(L, idx) != 0) {
+        hasElements = true;
+        if (!lua_isnumber(L, -2) || lua_tonumber(L, -2) != arrayIndex) {
+            isArray = false;
+        }
+        arrayIndex++;
+        lua_pop(L, 1);
+    }
+    
+    out += "{\"type\":\"table\",\"isArray\":";
+    out += isArray ? "true" : "false";
+    out += ",\"value\":";
+    
+    if (!hasElements) {
+        out += isArray ? "[]" : "{}";
+        out += "}";
+        seen.pop_back();
+        return;
+    }
+    
+    if (isArray) {
+        out += "[";
+        bool first = true;
+        lua_pushnil(L);
+        while (lua_next(L, idx) != 0) {
+            if (!first) out += ",";
+            first = false;
+            serializeValueToJson(L, -1, out, seen);
+            lua_pop(L, 1);
+        }
+        out += "]";
+    } else {
+        out += "{";
+        bool first = true;
+        lua_pushnil(L);
+        while (lua_next(L, idx) != 0) {
+            if (!first) out += ",";
+            first = false;
+            
+            int keyType = lua_type(L, -2);
+            std::string keyStr;
+            if (keyType == LUA_TSTRING) {
+                keyStr = lua_tostring(L, -2);
+            } else if (keyType == LUA_TNUMBER) {
+                keyStr = std::to_string(static_cast<long long>(lua_tonumber(L, -2)));
+            } else {
+                size_t len;
+                const char* s = luaL_tolstring(L, -2, &len);
+                if (s) keyStr = std::string(s, len);
+                lua_pop(L, 1);
+            }
+            
+            out += json::string(keyStr);
+            out += ":";
+            serializeValueToJson(L, -1, out, seen);
+            lua_pop(L, 1);
+        }
+        out += "}";
+    }
+    
+    out += "}";
+    seen.pop_back();
+}
+
+static void serializeValueToJson(lua_State* L, int idx, std::string& out, std::vector<const void*>& seen) {
+    switch (lua_type(L, idx)) {
+        case LUA_TNIL:
+            out += "{\"type\":\"nil\"}";
+            break;
+        case LUA_TBOOLEAN:
+            out += "{\"type\":\"boolean\",\"value\":";
+            out += lua_toboolean(L, idx) ? "true" : "false";
+            out += "}";
+            break;
+        case LUA_TNUMBER: {
+            double num = lua_tonumber(L, idx);
+            out += "{\"type\":\"number\",\"value\":";
+            if (num == static_cast<double>(static_cast<long long>(num))) {
+                out += std::to_string(static_cast<long long>(num));
+            } else {
+                char buf[64];
+                snprintf(buf, sizeof(buf), "%.14g", num);
+                out += buf;
+            }
+            out += "}";
+            break;
+        }
+        case LUA_TSTRING: {
+            size_t len;
+            const char* s = lua_tolstring(L, idx, &len);
+            out += "{\"type\":\"string\",\"value\":";
+            out += json::string(std::string(s, len));
+            out += "}";
+            break;
+        }
+        case LUA_TTABLE:
+            serializeTableToJson(L, idx, out, seen);
+            break;
+        case LUA_TFUNCTION:
+            out += "{\"type\":\"function\"}";
+            break;
+        case LUA_TUSERDATA:
+        case LUA_TLIGHTUSERDATA:
+            out += "{\"type\":\"userdata\"}";
+            break;
+        case LUA_TTHREAD:
+            out += "{\"type\":\"thread\"}";
+            break;
+        default:
+            out += "{\"type\":\"nil\"}";
+            break;
+    }
+}
+
+static std::vector<std::string> g_printCalls;
+
 static int playgroundPrint(lua_State* L) {
     int n = lua_gettop(L);
+    
+    std::string valuesJson = "[";
+    for (int i = 1; i <= n; i++) {
+        if (i > 1) valuesJson += ",";
+        std::vector<const void*> seen;
+        serializeValueToJson(L, i, valuesJson, seen);
+    }
+    valuesJson += "]";
+    g_printCalls.push_back(valuesJson);
+    
+    // Plain text fallback
     std::string line;
     
     for (int i = 1; i <= n; i++) {
@@ -346,17 +491,28 @@ EXPORT const char* luau_get_modules() {
     return setResult(json.str());
 }
 
+static std::string buildPrintsJson() {
+    std::string prints = "[";
+    for (size_t i = 0; i < g_printCalls.size(); i++) {
+        if (i > 0) prints += ",";
+        prints += g_printCalls[i];
+    }
+    prints += "]";
+    return prints;
+}
+
 /**
  * Execute Luau code and return the output as JSON.
- * Returns: { "success": bool, "output": string, "error": string? }
+ * Returns: { "success": bool, "output": string, "prints": [[LuauValue]], "error": string? }
  */
 EXPORT const char* luau_execute(const char* code) {
     g_outputBuffer.clear();
+    g_printCalls.clear();
     
     // Create a new Lua state
     std::unique_ptr<lua_State, decltype(&lua_close)> L(luaL_newstate(), lua_close);
     if (!L) {
-        return setResult("{\"success\":false,\"output\":\"\",\"error\":\"Failed to create Lua state\"}");
+        return setResult("{\"success\":false,\"output\":\"\",\"prints\":[],\"error\":\"Failed to create Lua state\"}");
     }
     
     // Set up sandbox
@@ -371,7 +527,7 @@ EXPORT const char* luau_execute(const char* code) {
     char* bytecode = luau_compile(code, strlen(code), nullptr, &bytecodeSize);
     
     if (!bytecode) {
-        return setResult("{\"success\":false,\"output\":\"\",\"error\":\"Compilation failed\"}");
+        return setResult("{\"success\":false,\"output\":\"\",\"prints\":[],\"error\":\"Compilation failed\"}");
     }
     
     // Load the bytecode (function goes on top of error handler)
@@ -383,6 +539,7 @@ EXPORT const char* luau_execute(const char* code) {
         std::string error = errMsg ? errMsg : "Failed to load bytecode";
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
+        result << ",\"prints\":" << buildPrintsJson();
         result << ",\"error\":" << json::string(error) << "}";
         return setResult(result.str());
     }
@@ -395,11 +552,13 @@ EXPORT const char* luau_execute(const char* code) {
     } catch (const std::exception& e) {
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
+        result << ",\"prints\":" << buildPrintsJson();
         result << ",\"error\":" << json::string(std::string("C++ exception: ") + e.what()) << "}";
         return setResult(result.str());
     } catch (...) {
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
+        result << ",\"prints\":" << buildPrintsJson();
         result << ",\"error\":\"Unknown C++ exception\"}";
         return setResult(result.str());
     }
@@ -409,12 +568,14 @@ EXPORT const char* luau_execute(const char* code) {
         std::string error = errMsg ? errMsg : "Unknown runtime error";
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
+        result << ",\"prints\":" << buildPrintsJson();
         result << ",\"error\":" << json::string(error) << "}";
         return setResult(result.str());
     }
     
     std::ostringstream result;
-    result << "{\"success\":true,\"output\":" << json::string(g_outputBuffer) << "}";
+    result << "{\"success\":true,\"output\":" << json::string(g_outputBuffer);
+    result << ",\"prints\":" << buildPrintsJson() << "}";
     return setResult(result.str());
 }
 
