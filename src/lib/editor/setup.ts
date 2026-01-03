@@ -12,7 +12,8 @@ import { bracketMatching, indentOnInput } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 
-import { luauTextMate, onGrammarReady } from './textmate';
+import { luauTextMate, onGrammarReady, initLuauTextMate } from './textmate';
+export { initLuauTextMate };
 import { darkTheme, lightTheme } from './themes';
 import { luauLspExtensions } from './lspExtensions';
 import { forceLinting, lintGutter } from '@codemirror/lint';

@@ -8,7 +8,6 @@
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { initShare } from '$lib/utils/share';
   import { loadLuauWasm } from '$lib/luau/wasm';
-  import { initLuauTextMate } from '$lib/editor/textmate';
 
   let mounted = $state(false);
 
@@ -31,16 +30,13 @@
       }
       
       initShare();
-      // Preload TextMate grammar and WASM module in parallel
-      Promise.all([
-        initLuauTextMate(),
-        loadLuauWasm(),
-      ]).catch(console.error);
+      
+      loadLuauWasm().catch(console.error);
     }
   });
 </script>
 
-<div class="flex flex-col h-full bg-[var(--bg-primary)] overflow-hidden">
+<div class="flex flex-col h-full bg-(--bg-primary) overflow-hidden">
   <TabBar />
   
   <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
