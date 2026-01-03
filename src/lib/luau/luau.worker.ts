@@ -38,7 +38,7 @@ export type WorkerRequest =
 
 export type WorkerResponse = 
   | { type: 'ready' }
-  | { type: 'execute'; result: ExecuteResult }
+  | { type: 'execute'; result: ExecuteResult; elapsed: number }
   | { type: 'getDiagnostics'; result: DiagnosticsResult }
   | { type: 'autocomplete'; result: AutocompleteResult }
   | { type: 'hover'; result: HoverResult }
@@ -96,15 +96,18 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
       
       case 'execute': {
         const module = await loadModule();
+        const startTime = performance.now();
         const resultJson = module.ccall('luau_execute', 'string', ['string'], [request.code]);
+        const elapsed = performance.now() - startTime;
         if (!resultJson) {
           respond({ 
             type: 'execute', 
-            result: { success: false, output: '', error: 'No result returned from execution' } 
+            result: { success: false, output: '', error: 'No result returned from execution' },
+            elapsed
           }, requestId);
         } else {
           const parsed = JSON.parse(resultJson) as ExecuteResult;
-          respond({ type: 'execute', result: parsed }, requestId);
+          respond({ type: 'execute', result: parsed, elapsed }, requestId);
         }
         break;
       }

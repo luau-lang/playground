@@ -189,18 +189,19 @@ export async function stopExecution(): Promise<void> {
 
 /**
  * Execute Luau code.
+ * Returns both the result and the execution time measured inside the worker.
  */
-export async function executeCode(code: string): Promise<ExecuteResult> {
+export async function executeCode(code: string): Promise<{ result: ExecuteResult; elapsed: number }> {
   try {
     const response = await sendRequest({ type: 'execute', code });
     if (response.type === 'execute') {
-      return response.result;
+      return { result: response.result, elapsed: response.elapsed };
     }
-    return { success: false, output: '', error: 'Unexpected response type' };
+    return { result: { success: false, output: '', error: 'Unexpected response type' }, elapsed: 0 };
   } catch (error) {
     // Check if this was a stop - don't return an error for that
     if (error instanceof Error && error.message === 'Execution stopped') {
-      return { success: false, output: '', error: undefined };
+      return { result: { success: false, output: '', error: undefined }, elapsed: 0 };
     }
     
     let errorMsg = 'Unknown execution error';
@@ -211,9 +212,8 @@ export async function executeCode(code: string): Promise<ExecuteResult> {
     }
     
     return {
-      success: false,
-      output: '',
-      error: errorMsg,
+      result: { success: false, output: '', error: errorMsg },
+      elapsed: 0,
     };
   }
 }
@@ -383,11 +383,7 @@ export async function runCode(): Promise<void> {
     const allFiles = getAllFiles();
     await sendRequest({ type: 'registerModules', modules: allFiles });
     
-    // Measure execution time
-    const startTime = performance.now();
-    const result = await executeCode(code);
-    const endTime = performance.now();
-    const elapsed = endTime - startTime;
+    const { result, elapsed } = await executeCode(code);
     
     setExecutionTime(elapsed);
     
