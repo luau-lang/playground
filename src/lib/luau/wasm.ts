@@ -19,6 +19,8 @@ import type {
 } from './types';
 import createLuauModule from './luau-module.js';
 
+declare const __wasmPromises: { onig: Promise<ArrayBuffer>; luau: Promise<ArrayBuffer> } | undefined;
+
 let wasmModule: LuauWasmModule | null = null;
 let modulePromise: Promise<LuauWasmModule> | null = null;
 
@@ -37,18 +39,14 @@ export async function loadLuauWasm(): Promise<LuauWasmModule> {
 
   modulePromise = (async (): Promise<LuauWasmModule> => {
     try {
-      // Build the base URL for WASM file resolution
-      // Use document.baseURI to handle both root and subdirectory deployments
-      const baseUrl = new URL('./', document.baseURI).href.replace(/\/$/, '');
+      // Get the preloaded WASM binary (use promise from HTML if available)
+      const wasmBinary = await (typeof __wasmPromises !== 'undefined'
+        ? __wasmPromises.luau
+        : fetch('/wasm/luau.wasm').then(r => r.arrayBuffer()));
       
       // Create the module using the bundled factory function
       const module = await (createLuauModule as CreateLuauModule)({
-        locateFile: (path: string) => {
-          if (path.endsWith('.wasm')) {
-            return `${baseUrl}/wasm/luau.wasm`;
-          }
-          return `${baseUrl}/wasm/${path}`;
-        },
+        wasmBinary: new Uint8Array(wasmBinary),
       });
 
       wasmModule = module;
