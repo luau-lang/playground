@@ -15,6 +15,7 @@ import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { luauTextMate, onGrammarReady } from './textmate';
 import { darkTheme, lightTheme } from './themes';
 import { luauLspExtensions } from './lspExtensions';
+import { forceLinting, lintGutter } from '@codemirror/lint';
 import { themeMode } from '$lib/utils/theme';
 import { cursorLine } from '$lib/stores/playground';
 import { get } from 'svelte/store';
@@ -22,8 +23,9 @@ import { get } from 'svelte/store';
 let editorView: EditorView | null = null;
 let onChangeCallback: ((content: string) => void) | null = null;
 
-// Compartment for dynamic theme switching
+// Compartments for dynamic reconfiguration
 const themeCompartment = new Compartment();
+const luauCompartment = new Compartment();
 
 // Subscribe to theme changes
 let unsubscribeTheme: (() => void) | null = null;
@@ -53,6 +55,7 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     crosshairCursor(),
     highlightActiveLine(),
     highlightSelectionMatches(),
+    lintGutter(),
     
     // Keymaps
     keymap.of([
@@ -63,11 +66,8 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
       indentWithTab,
     ]),
     
-    // Luau language support (TextMate grammar)
-    luauTextMate(),
-    
-    // LSP-like features (diagnostics, autocomplete, hover)
-    ...luauLspExtensions(),
+    // Luau language + LSP extensions (added after grammar loads for better LCP)
+    luauCompartment.of([]),
     
     // Theme (dynamic)
     themeCompartment.of(getThemeExtension()),
@@ -149,19 +149,17 @@ export function createEditor(
   };
   mediaQuery.addEventListener('change', handleMediaChange);
 
-  // Register callback to refresh highlighting when grammar loads
+  // Add language + LSP extensions once grammar is ready
   onGrammarReady(() => {
     if (editorView) {
-      // Force a re-parse by modifying and reverting
-      // This triggers the tokenizer to re-run with the loaded grammar
-      const content = editorView.state.doc.toString();
       editorView.dispatch({
-        changes: { from: 0, to: content.length, insert: content + ' ' },
+        effects: luauCompartment.reconfigure([
+          luauTextMate(),
+          ...luauLspExtensions(),
+        ]),
       });
-      editorView.dispatch({
-        changes: { from: content.length, to: content.length + 1 },
-      });
-      console.log('[Editor] Refreshed syntax highlighting after grammar load');
+
+      console.log('[Editor] Language and LSP extensions loaded');
     }
   });
 
@@ -224,18 +222,11 @@ export function focusEditor(): void {
 }
 
 /**
- * Force a refresh of diagnostics by simulating a document change.
+ * Force a refresh of diagnostics.
  * This is useful when settings change and we need to re-run the linter.
  */
 export function refreshDiagnostics(): void {
   if (editorView) {
-    const content = editorView.state.doc.toString();
-    // Insert and remove a space to trigger the linter
-    editorView.dispatch({
-      changes: { from: content.length, insert: ' ' },
-    });
-    editorView.dispatch({
-      changes: { from: content.length, to: content.length + 1 },
-    });
+    forceLinting(editorView);
   }
 }

@@ -320,7 +320,6 @@ function createLuauHover() {
 export function luauLspExtensions(): Extension[] {
   return [
     createLuauLinter(),
-    lintGutter(),
     ...createLuauAutocomplete(),
     createLuauHover(),
   ];
