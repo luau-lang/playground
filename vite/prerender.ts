@@ -34,7 +34,7 @@ export function prerenderPlugin(): Plugin {
           ssr: true,
           outDir: serverOutDir,
           rollupOptions: {
-            input: path.resolve(rootDir, 'src/entry-server.ts'),
+            input: path.resolve(__dirname, 'entry-server.ts'),
           },
         },
         logLevel: 'warn',
