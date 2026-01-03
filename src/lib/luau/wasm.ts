@@ -1,117 +1,211 @@
 /**
  * Luau WASM Module Loader and Runner
  * 
- * Loads the bundled Luau WASM module.
+ * Uses a Web Worker to run WASM execution off the main thread.
+ * This prevents infinite loops from freezing the UI and allows stopping execution.
  */
 
 import { appendOutput, clearOutput, setRunning, setExecutionTime, getActiveFileContent, activeFile, getAllFiles } from '$lib/stores/playground';
 import { settings, type LuauMode, type SolverMode } from '$lib/stores/settings';
 import { get } from 'svelte/store';
 import type { 
-  LuauWasmModule, 
   ExecuteResult, 
-  DiagnosticsResult, 
-  AutocompleteResult, 
-  HoverResult,
   LuauDiagnostic,
   LuauCompletion,
-  CreateLuauModule
 } from './types';
-import createLuauModule from './luau-module.js';
+import type { WorkerRequest, WorkerResponse } from './luau.worker';
+import LuauWorker from './luau.worker?worker';
 
-let wasmModule: LuauWasmModule | null = null;
-let modulePromise: Promise<LuauWasmModule> | null = null;
+// Worker instance
+let worker: Worker | null = null;
+let workerReady = false;
+let workerReadyPromise: Promise<void> | null = null;
+
+// Pending requests waiting for responses
+const pendingRequests = new Map<string, {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+}>();
+
+let requestIdCounter = 0;
 
 /**
- * Load the Luau WASM module.
- * Uses dynamic import with full URL for ES modules in /public.
+ * Get the base URL for WASM file resolution.
  */
-export async function loadLuauWasm(): Promise<LuauWasmModule> {
-  if (wasmModule) {
-    return wasmModule;
+function getBaseUrl(): string {
+  return new URL('./', document.baseURI).href.replace(/\/$/, '');
+}
+
+/**
+ * Create and initialize the worker.
+ */
+function createWorker(): Worker {
+  const newWorker = new LuauWorker();
+  
+  newWorker.onmessage = (e: MessageEvent<WorkerResponse & { requestId?: string }>) => {
+    const response = e.data;
+    
+    // Handle ready message
+    if (response.type === 'ready') {
+      workerReady = true;
+      console.log('[Luau WASM] Worker ready');
+      return;
+    }
+    
+    // Handle response with requestId
+    const requestId = response.requestId;
+    if (requestId && pendingRequests.has(requestId)) {
+      const { resolve, reject } = pendingRequests.get(requestId)!;
+      pendingRequests.delete(requestId);
+      
+      if (response.type === 'error') {
+        reject(new Error(response.error));
+      } else {
+        resolve(response);
+      }
+    }
+  };
+  
+  newWorker.onerror = (e) => {
+    console.error('[Luau WASM] Worker error:', e);
+    // Reject all pending requests
+    for (const [id, { reject }] of pendingRequests) {
+      reject(new Error('Worker error'));
+      pendingRequests.delete(id);
+    }
+  };
+  
+  return newWorker;
+}
+
+/**
+ * Send a request to the worker and wait for a response.
+ */
+async function sendRequest<T extends WorkerRequest>(request: T): Promise<WorkerResponse> {
+  await loadLuauWasm();
+  
+  const requestId = `req_${requestIdCounter++}`;
+  
+  return new Promise((resolve, reject) => {
+    pendingRequests.set(requestId, { 
+      resolve: resolve as (value: unknown) => void, 
+      reject 
+    });
+    worker!.postMessage({ ...request, requestId });
+  });
+}
+
+/**
+ * Load/initialize the Luau WASM worker.
+ */
+export async function loadLuauWasm(): Promise<void> {
+  if (workerReady && worker) {
+    return;
   }
 
-  if (modulePromise) {
-    return modulePromise;
+  if (workerReadyPromise) {
+    return workerReadyPromise;
   }
 
-  modulePromise = (async (): Promise<LuauWasmModule> => {
+  workerReadyPromise = (async () => {
     try {
-      // Build the base URL for WASM file resolution
-      // Use document.baseURI to handle both root and subdirectory deployments
-      const baseUrl = new URL('./', document.baseURI).href.replace(/\/$/, '');
+      worker = createWorker();
       
-      // Create the module using the bundled factory function
-      const module = await (createLuauModule as CreateLuauModule)({
-        locateFile: (path: string) => {
-          if (path.endsWith('.wasm')) {
-            return `${baseUrl}/wasm/luau.wasm`;
+      // Wait for worker to be ready
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Worker initialization timeout'));
+        }, 30000);
+        
+        const currentWorker = worker!;
+        const originalOnMessage = currentWorker.onmessage;
+        currentWorker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+          if (e.data.type === 'ready') {
+            clearTimeout(timeout);
+            currentWorker.onmessage = originalOnMessage;
+            resolve();
           }
-          return `${baseUrl}/wasm/${path}`;
-        },
+          // Also call original handler
+          originalOnMessage?.call(currentWorker, e);
+        };
+        
+        // Send init message
+        const baseUrl = getBaseUrl();
+        currentWorker.postMessage({ type: 'init', baseUrl } satisfies WorkerRequest);
       });
-
-      wasmModule = module;
-      console.log('[Luau WASM] Module loaded successfully');
       
-      // Sync settings to WASM module
+      workerReady = true;
+      console.log('[Luau WASM] Module loaded successfully via worker');
+      
+      // Sync settings to worker
       const currentSettings = get(settings);
       const modeNum = currentSettings.mode === 'strict' ? 1 : currentSettings.mode === 'nocheck' ? 2 : 0;
-      try {
-        module.ccall('luau_set_mode', null, ['number'], [modeNum]);
-        module.ccall('luau_set_solver', null, ['boolean'], [currentSettings.solver === 'new']);
-      } catch {
-        // Ignore sync errors on load
-      }
+      await sendRequest({ type: 'setMode', mode: modeNum });
+      await sendRequest({ type: 'setSolver', isNew: currentSettings.solver === 'new' });
       
       // Start listening to settings changes
       initSettingsSync();
-      
-      return module;
     } catch (error) {
-      modulePromise = null;
+      workerReadyPromise = null;
+      workerReady = false;
       throw new Error('Failed to load Luau WASM module', { cause: error });
     }
   })();
 
-  return modulePromise;
+  return workerReadyPromise;
 }
 
 /**
  * Check if WASM module is loaded.
  */
 export function isWasmLoaded(): boolean {
-  return wasmModule !== null;
+  return workerReady;
+}
+
+/**
+ * Stop any running execution by terminating and recreating the worker.
+ */
+export async function stopExecution(): Promise<void> {
+  if (!worker) return;
+  
+  console.log('[Luau WASM] Stopping execution...');
+  
+  // Terminate the worker
+  worker.terminate();
+  worker = null;
+  workerReady = false;
+  workerReadyPromise = null;
+  
+  // Reject all pending requests
+  for (const [id, { reject }] of pendingRequests) {
+    reject(new Error('Execution stopped'));
+    pendingRequests.delete(id);
+  }
+  
+  // Update running state
+  setRunning(false);
+  appendOutput({ type: 'warn', text: 'Execution stopped' });
 }
 
 /**
  * Execute Luau code.
  */
 export async function executeCode(code: string): Promise<ExecuteResult> {
-  const module = await loadLuauWasm();
-  
   try {
-    const resultJson = module.ccall('luau_execute', 'string', ['string'], [code]);
-    if (!resultJson) {
-      return {
-        success: false,
-        output: '',
-        error: 'No result returned from execution',
-      };
+    const response = await sendRequest({ type: 'execute', code });
+    if (response.type === 'execute') {
+      return response.result;
     }
-    const parsed = JSON.parse(resultJson) as ExecuteResult;
-    return parsed;
+    return { success: false, output: '', error: 'Unexpected response type' };
   } catch (error) {
-    // Try to extract more info from the error
+    // Check if this was a stop - don't return an error for that
+    if (error instanceof Error && error.message === 'Execution stopped') {
+      return { success: false, output: '', error: undefined };
+    }
+    
     let errorMsg = 'Unknown execution error';
     if (error instanceof Error) {
       errorMsg = error.message;
-      if (error.stack) {
-        console.error('[Luau] Execution error stack:', error.stack);
-      }
-    } else if (typeof error === 'number') {
-      // Emscripten exception pointer - this means a C++ exception wasn't caught
-      errorMsg = `Uncaught Luau exception (code: ${error})`;
     } else {
       errorMsg = String(error);
     }
@@ -125,41 +219,19 @@ export async function executeCode(code: string): Promise<ExecuteResult> {
 }
 
 /**
- * Register all files with the analysis engine for cross-file type checking.
- */
-async function registerAllFilesForAnalysis(): Promise<void> {
-  const allFiles = getAllFiles();
-  const module = await loadLuauWasm();
-  
-  // Register each file's source for analysis
-  for (const [name, content] of Object.entries(allFiles)) {
-    try {
-      module.ccall('luau_set_source', null, ['string', 'string'], [name, content]);
-      
-      // Also register without extension for require resolution
-      const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
-      if (nameWithoutExt !== name) {
-        module.ccall('luau_set_source', null, ['string', 'string'], [nameWithoutExt, content]);
-      }
-    } catch {
-      // Ignore individual file registration errors
-    }
-  }
-}
-
-/**
  * Get diagnostics for code.
  */
 export async function getDiagnostics(code: string): Promise<LuauDiagnostic[]> {
-  const module = await loadLuauWasm();
-  
   try {
     // Register all files for cross-file type checking
-    await registerAllFilesForAnalysis();
+    const allFiles = getAllFiles();
+    await sendRequest({ type: 'registerSources', sources: allFiles });
     
-    const resultJson = module.ccall('luau_get_diagnostics', 'string', ['string'], [code]);
-    const result = JSON.parse(resultJson) as DiagnosticsResult;
-    return result.diagnostics;
+    const response = await sendRequest({ type: 'getDiagnostics', code });
+    if (response.type === 'getDiagnostics') {
+      return response.result.diagnostics;
+    }
+    return [];
   } catch (error) {
     console.error('[Luau] Diagnostics error:', error);
     return [];
@@ -170,12 +242,12 @@ export async function getDiagnostics(code: string): Promise<LuauDiagnostic[]> {
  * Get autocomplete suggestions.
  */
 export async function getAutocomplete(code: string, line: number, col: number): Promise<LuauCompletion[]> {
-  const module = await loadLuauWasm();
-  
   try {
-    const resultJson = module.ccall('luau_autocomplete', 'string', ['string', 'number', 'number'], [code, line, col]);
-    const result = JSON.parse(resultJson) as AutocompleteResult;
-    return result.items;
+    const response = await sendRequest({ type: 'autocomplete', code, line, col });
+    if (response.type === 'autocomplete') {
+      return response.result.items;
+    }
+    return [];
   } catch (error) {
     console.error('[Luau] Autocomplete error:', error);
     return [];
@@ -186,12 +258,12 @@ export async function getAutocomplete(code: string, line: number, col: number): 
  * Get hover information.
  */
 export async function getHover(code: string, line: number, col: number): Promise<string | null> {
-  const module = await loadLuauWasm();
-  
   try {
-    const resultJson = module.ccall('luau_hover', 'string', ['string', 'number', 'number'], [code, line, col]);
-    const result = JSON.parse(resultJson) as HoverResult;
-    return result.content;
+    const response = await sendRequest({ type: 'hover', code, line, col });
+    if (response.type === 'hover') {
+      return response.result.content;
+    }
+    return null;
   } catch (error) {
     console.error('[Luau] Hover error:', error);
     return null;
@@ -202,9 +274,8 @@ export async function getHover(code: string, line: number, col: number): Promise
  * Add a module that can be required.
  */
 export async function addModule(name: string, source: string): Promise<void> {
-  const module = await loadLuauWasm();
   try {
-    module.ccall('luau_add_module', null, ['string', 'string'], [name, source]);
+    await sendRequest({ type: 'addModule', name, source });
   } catch (error) {
     console.error('[Luau] Failed to add module:', error);
   }
@@ -214,9 +285,8 @@ export async function addModule(name: string, source: string): Promise<void> {
  * Clear all registered modules.
  */
 export async function clearModules(): Promise<void> {
-  const module = await loadLuauWasm();
   try {
-    module.ccall('luau_clear_modules', null, [], []);
+    await sendRequest({ type: 'clearModules' });
   } catch (error) {
     console.error('[Luau] Failed to clear modules:', error);
   }
@@ -226,11 +296,12 @@ export async function clearModules(): Promise<void> {
  * Get list of available modules for autocomplete.
  */
 export async function getAvailableModules(): Promise<string[]> {
-  const module = await loadLuauWasm();
   try {
-    const resultJson = module.ccall('luau_get_modules', 'string', [], []);
-    const result = JSON.parse(resultJson) as { modules: string[] };
-    return result.modules;
+    const response = await sendRequest({ type: 'getModules' });
+    if (response.type === 'getModules') {
+      return response.result.modules;
+    }
+    return [];
   } catch (error) {
     console.error('[Luau] Failed to get modules:', error);
     return [];
@@ -241,9 +312,8 @@ export async function getAvailableModules(): Promise<string[]> {
  * Set source for a file (for analysis).
  */
 export async function setSource(name: string, source: string): Promise<void> {
-  const module = await loadLuauWasm();
   try {
-    module.ccall('luau_set_source', null, ['string', 'string'], [name, source]);
+    await sendRequest({ type: 'setSource', name, source });
   } catch (error) {
     console.error('[Luau] Failed to set source:', error);
   }
@@ -253,10 +323,9 @@ export async function setSource(name: string, source: string): Promise<void> {
  * Set the type checking mode.
  */
 export async function setLuauMode(mode: LuauMode): Promise<void> {
-  const module = await loadLuauWasm();
   const modeNum = mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
   try {
-    module.ccall('luau_set_mode', null, ['number'], [modeNum]);
+    await sendRequest({ type: 'setMode', mode: modeNum });
   } catch (error) {
     console.error('[Luau] Failed to set mode:', error);
   }
@@ -266,9 +335,8 @@ export async function setLuauMode(mode: LuauMode): Promise<void> {
  * Set the solver mode.
  */
 export async function setLuauSolver(solver: SolverMode): Promise<void> {
-  const module = await loadLuauWasm();
   try {
-    module.ccall('luau_set_solver', null, ['boolean'], [solver === 'new']);
+    await sendRequest({ type: 'setSolver', isNew: solver === 'new' });
   } catch (error) {
     console.error('[Luau] Failed to set solver:', error);
   }
@@ -290,42 +358,11 @@ export function initSettingsSync(): void {
   if (settingsUnsubscribe) return;
   
   settingsUnsubscribe = settings.subscribe(async (newSettings) => {
-    if (wasmModule) {
+    if (workerReady) {
       await setLuauMode(newSettings.mode);
       await setLuauSolver(newSettings.solver);
     }
   });
-}
-
-/**
- * Register all files as modules (for require support).
- */
-async function registerAllModules(): Promise<void> {
-  const allFiles = getAllFiles();
-  const module = await loadLuauWasm();
-  
-  // Clear existing modules first
-  try {
-    module.ccall('luau_clear_modules', null, [], []);
-  } catch {
-    // Ignore clear errors
-  }
-  
-  // Register each file as a module
-  for (const [name, content] of Object.entries(allFiles)) {
-    try {
-      // Register with the file name (with extension)
-      module.ccall('luau_add_module', null, ['string', 'string'], [name, content]);
-      
-      // Also register without extension for convenience
-      const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
-      if (nameWithoutExt !== name) {
-        module.ccall('luau_add_module', null, ['string', 'string'], [nameWithoutExt, content]);
-      }
-    } catch {
-      // Ignore individual module registration errors
-    }
-  }
 }
 
 /**
@@ -343,7 +380,8 @@ export async function runCode(): Promise<void> {
     appendOutput({ type: 'log', text: `Running ${fileName}...` });
     
     // Register all files as modules for require support
-    await registerAllModules();
+    const allFiles = getAllFiles();
+    await sendRequest({ type: 'registerModules', modules: allFiles });
     
     // Measure execution time
     const startTime = performance.now();
@@ -370,10 +408,13 @@ export async function runCode(): Promise<void> {
       });
     }
   } catch (error) {
-    appendOutput({
-      type: 'error',
-      text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-    });
+    // Only show error if not a "stopped" error
+    if (error instanceof Error && error.message !== 'Execution stopped') {
+      appendOutput({
+        type: 'error',
+        text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   } finally {
     setRunning(false);
   }
@@ -440,16 +481,19 @@ export async function getBytecode(
   outputFormat: number = 0,
   showRemarks: boolean = false
 ): Promise<{ success: boolean; bytecode: string; error?: string }> {
-  const module = await loadLuauWasm();
-  
   try {
-    const resultJson = module.ccall(
-      'luau_dump_bytecode',
-      'string',
-      ['string', 'number', 'number', 'number', 'number'],
-      [code, optimizationLevel, debugLevel, outputFormat, showRemarks ? 1 : 0]
-    );
-    return JSON.parse(resultJson);
+    const response = await sendRequest({ 
+      type: 'getBytecode', 
+      code, 
+      optimizationLevel, 
+      debugLevel, 
+      outputFormat, 
+      showRemarks 
+    });
+    if (response.type === 'getBytecode') {
+      return response.result;
+    }
+    return { success: false, bytecode: '', error: 'Unexpected response type' };
   } catch (error) {
     return {
       success: false,

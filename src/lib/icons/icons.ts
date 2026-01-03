@@ -1,5 +1,6 @@
 // Import Phosphor icons directly from @phosphor-icons/core (Bold weight)
 import play from '@phosphor-icons/core/assets/fill/play-fill.svg?raw';
+import stop from '@phosphor-icons/core/assets/fill/stop-fill.svg?raw';
 import x from '@phosphor-icons/core/assets/bold/x-bold.svg?raw';
 import check from '@phosphor-icons/core/assets/bold/check-bold.svg?raw';
 import gear from '@phosphor-icons/core/assets/bold/gear-bold.svg?raw';
@@ -14,6 +15,7 @@ import binary from '@phosphor-icons/core/assets/bold/binary-bold.svg?raw';
 
 export const icons = {
   play,
+  stop,
   x,
   check,
   gear,
