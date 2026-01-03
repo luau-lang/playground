@@ -7,9 +7,9 @@
 
 import { EditorView, hoverTooltip, ViewPlugin } from '@codemirror/view';
 import type { Tooltip } from '@codemirror/view';
-import { linter, lintGutter } from '@codemirror/lint';
+import { linter } from '@codemirror/lint';
 import type { Diagnostic } from '@codemirror/lint';
-import { autocompletion, CompletionContext, startCompletion } from '@codemirror/autocomplete';
+import { autocompletion, startCompletion, type CompletionContext } from '@codemirror/autocomplete';
 import type { CompletionResult, Completion } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
 import { getDiagnostics, getAutocomplete, getHover, getAvailableModules, type LuauDiagnostic, type LuauCompletion } from '$lib/luau/wasm';

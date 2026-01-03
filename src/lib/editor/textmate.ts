@@ -5,7 +5,7 @@
  * from https://github.com/JohnnyMorganz/Luau.tmLanguage
  */
 
-import { StreamLanguage, StringStream, LanguageSupport } from '@codemirror/language';
+import { StreamLanguage, LanguageSupport, type StringStream } from '@codemirror/language';
 import * as vsctm from 'vscode-textmate';
 import * as oniguruma from 'vscode-oniguruma';
 import luauGrammar from './Luau.tmLanguage.json';

@@ -38,7 +38,7 @@
   });
 </script>
 
-<div class="flex flex-col h-full bg-[var(--bg-primary)] overflow-hidden">
+<div class="flex flex-col h-full bg-(--bg-primary) overflow-hidden">
   <TabBar />
   
   <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
