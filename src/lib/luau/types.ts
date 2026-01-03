@@ -92,6 +92,7 @@ export interface LuauWasmModule {
 
 export type CreateLuauModule = (options?: {
   locateFile?: (path: string, prefix: string) => string;
+  wasmBinary?: Uint8Array;
   print?: (text: string) => void;
   printErr?: (text: string) => void;
 }) => Promise<LuauWasmModule>;

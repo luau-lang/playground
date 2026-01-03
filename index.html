@@ -9,8 +9,6 @@
     <link rel="preload" href="/font/BuilderSans-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/font/BuilderSans-Medium.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/font/BuilderMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/wasm/luau.wasm" as="fetch" type="application/wasm" crossorigin />
-    <link rel="preload" href="/wasm/onig.wasm" as="fetch" type="application/wasm" crossorigin />
     <script>
       // Prevent theme flash - must run synchronously before CSS
       (function() {
@@ -22,6 +20,11 @@
         }
         document.documentElement.style.background = isDark ? '#0a0a0f' : '#fafafa';
       })();
+      // Start WASM fetches immediately (before module scripts load)
+      window.__wasmPromises = {
+        onig: fetch('/wasm/onig.wasm').then(function (r) { return r.arrayBuffer(); }),
+        luau: fetch('/wasm/luau.wasm').then(function(r) { return r.arrayBuffer(); })
+      };
     </script>
     <!--app-head-->
   </head>
