@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { files, activeFile, updateFile, defaultCode } from '$lib/stores/playground';
+  import { files, activeFile, updateFile } from '$lib/stores/playground';
+  import { get } from 'svelte/store';
 
   let editorContainer: HTMLDivElement;
   let currentFile = $state('');
@@ -38,10 +39,12 @@
     }
   });
 
-  let defaultCodeLines = $files[$activeFile]?.split('\n').map(line => {
-      const leading = line.match(/^ */)?.[0]?.length ?? 0;
-      return { leading, length: line.length };
-    }) ?? [];
+  // Snapshot for skeleton - computed once, not reactive
+  const initialContent = get(files)[get(activeFile)] ?? '';
+  const defaultCodeLines = initialContent.split('\n').map(line => {
+    const leading = line.match(/^ */)?.[0]?.length ?? 0;
+    return { leading, length: line.length };
+  });
 </script>
 
 <div class="h-full w-full bg-(--bg-editor) relative" bind:this={editorContainer}>
@@ -50,7 +53,7 @@
       <!-- Fake line numbers + code skeleton -->
       <div class="flex gap-5">
         <div class="flex flex-col items-end opacity-50 select-none">
-          {#each defaultCode.split('\n') as _, i}
+          {#each defaultCodeLines as _, i}
             <span class="leading-[1.4] pl-[5px] pr-[3px]">{i + 1}</span>
           {/each}
         </div>
