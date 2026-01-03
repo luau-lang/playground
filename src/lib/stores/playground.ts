@@ -13,7 +13,7 @@ export interface PlaygroundState {
 }
 
 // Default initial code
-export const defaultCode = `-- Welcome to the Luau Playground!
+const defaultCode = `-- Welcome to the Luau Playground!
 -- Write your code here and click Run
 
 local function greet(name: string): string
