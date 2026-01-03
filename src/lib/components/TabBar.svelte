@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from '$lib/components/ui/button';
+  import Button from '$lib/components/Button.svelte';
   import { Icon, type IconName } from '$lib/icons';
   import ConfigPopover from '$lib/components/ConfigPopover.svelte';
   import { files, activeFile, addFile, removeFile, setActiveFile, renameFile } from '$lib/stores/playground';

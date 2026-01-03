@@ -1,7 +1,7 @@
 <script lang="ts">
   import { output, isRunning, clearOutput, executionTime } from '$lib/stores/playground';
   import { isEmbed } from '$lib/stores/embed';
-  import { Button } from '$lib/components/ui/button';
+  import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
   import { formatTime, isStackTraceLine, formatStackLine } from '$lib/utils/output';
   import ObjectView from './ObjectView.svelte';
@@ -99,7 +99,7 @@
     <!-- Always render button container to prevent layout shift, but hide when not needed -->
     <div class="-my-1">
       {#if isExpanded && $output.length > 0}
-        <Button size="sm" variant="ghost" onclick={clearOutput} class="h-7 px-2" title="Clear output">
+        <Button size="none" variant="ghost" onclick={clearOutput} class="h-7 px-2 text-xs" title="Clear output">
           Clear
         </Button>
       {/if}

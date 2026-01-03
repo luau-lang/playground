@@ -2,7 +2,7 @@
   import { files, activeFile, cursorLine } from '$lib/stores/playground';
   import { settings, showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { getBytecode } from '$lib/luau/wasm';
-  import { Button } from '$lib/components/ui/button';
+  import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
 
   interface ParsedLine {
@@ -323,7 +323,7 @@
           <span class="text-xs text-(--text-muted) animate-pulse">compiling...</span>
         {/if}
       </div>
-      <Button size="sm" variant="ghost" onclick={toggleBytecode} class="h-6 w-6 p-0 min-w-0" title="Close bytecode view">
+      <Button size="none" variant="ghost" onclick={toggleBytecode} class="h-6 w-6 p-0 min-w-0" title="Close bytecode view">
         <Icon name="x" size={16} />
       </Button>
     </div>
