@@ -1,5 +1,11 @@
 import type { Plugin } from 'vite';
 
+const ignoredChunks = [
+  'assets/popover-',
+  'assets/css-anchor-positioning-',
+  'assets/index-',
+];
+
 /**
  * Adds modulepreload links for dynamically imported chunks.
  * This improves loading performance by preloading chunks that will be needed.
@@ -12,7 +18,7 @@ export function preloadDynamicChunks(): Plugin {
 
       const preloads: string[] = [];
       for (const [fileName] of Object.entries(ctx.bundle)) {
-        if (fileName.startsWith('assets/setup-') && fileName.endsWith('.js')) {
+        if (!ignoredChunks.some(prefix => fileName.startsWith(prefix)) && fileName.endsWith('.js')) {
           preloads.push(`<link rel="modulepreload" crossorigin href="/${fileName}">`);
         }
       }
