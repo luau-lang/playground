@@ -16,7 +16,6 @@
   } from '$lib/stores/settings';
   import { Button } from '$lib/components/ui/button';
   import { Icon } from '$lib/icons';
-  import { refreshDiagnostics } from '$lib/editor/setup';
 
   let open = $state(false);
 
@@ -50,13 +49,15 @@
     { value: 3, label: 'arm64', description: 'arm64 native code' },
   ];
 
-  function handleModeChange(mode: LuauMode) {
+  async function handleModeChange(mode: LuauMode) {
     setMode(mode);
+    const { refreshDiagnostics } = await import('$lib/editor/setup');
     setTimeout(() => refreshDiagnostics(), 50);
   }
 
-  function handleSolverChange(solver: SolverMode) {
+  async function handleSolverChange(solver: SolverMode) {
     setSolver(solver);
+    const { refreshDiagnostics } = await import('$lib/editor/setup');
     setTimeout(() => refreshDiagnostics(), 50);
   }
 </script>

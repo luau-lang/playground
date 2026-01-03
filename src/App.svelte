@@ -7,8 +7,6 @@
   import { isEmbed, embedTheme } from '$lib/stores/embed';
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { initShare } from '$lib/utils/share';
-  import { loadLuauWasm } from '$lib/luau/wasm';
-  import { initLuauTextMate } from '$lib/editor/textmate';
 
   let mounted = $state(false);
 
@@ -31,11 +29,11 @@
       }
       
       initShare();
-      // Preload TextMate grammar and WASM module in parallel
-      Promise.all([
-        initLuauTextMate(),
-        loadLuauWasm(),
-      ]).catch(console.error);
+      
+      // Preload WASM module in background (TextMate is loaded with the editor)
+      import('$lib/luau/wasm').then(({ loadLuauWasm }) => {
+        loadLuauWasm().catch(console.error);
+      });
     }
   });
 </script>
