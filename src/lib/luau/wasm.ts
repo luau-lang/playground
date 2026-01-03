@@ -16,6 +16,26 @@ import type {
 import type { WorkerRequest, WorkerResponse } from './luau.worker';
 import LuauWorker from './luau.worker?worker';
 
+declare const __wasmPromises: { onig: Promise<ArrayBuffer>; luau: Promise<ArrayBuffer> } | undefined;
+
+// Cached WASM binary promise - survives worker restarts
+let wasmBinaryPromise: Promise<ArrayBuffer> | null = null;
+
+/**
+ * Get the WASM binary, using preloaded promise from index.html or fetching once.
+ */
+function getWasmBinary(): Promise<ArrayBuffer> {
+  if (!wasmBinaryPromise) {
+    if (typeof __wasmPromises !== 'undefined') {
+      wasmBinaryPromise = __wasmPromises.luau;
+    } else {
+      const baseUrl = new URL('./', document.baseURI).href.replace(/\/$/, '');
+      wasmBinaryPromise = fetch(`${baseUrl}/wasm/luau.wasm`).then(r => r.arrayBuffer());
+    }
+  }
+  return wasmBinaryPromise;
+}
+
 // Worker instance
 let worker: Worker | null = null;
 let workerReady = false;
@@ -28,13 +48,6 @@ const pendingRequests = new Map<string, {
 }>();
 
 let requestIdCounter = 0;
-
-/**
- * Get the base URL for WASM file resolution.
- */
-function getBaseUrl(): string {
-  return new URL('./', document.baseURI).href.replace(/\/$/, '');
-}
 
 /**
  * Create and initialize the worker.
@@ -109,6 +122,9 @@ export async function loadLuauWasm(): Promise<void> {
 
   workerReadyPromise = (async () => {
     try {
+      // Start WASM download (uses cached promise, survives worker restarts)
+      const wasmBinary = await getWasmBinary();
+      
       worker = createWorker();
       
       // Wait for worker to be ready
@@ -129,9 +145,8 @@ export async function loadLuauWasm(): Promise<void> {
           originalOnMessage?.call(currentWorker, e);
         };
         
-        // Send init message
-        const baseUrl = getBaseUrl();
-        currentWorker.postMessage({ type: 'init', baseUrl } satisfies WorkerRequest);
+        // Send init message with WASM binary (cloned, not transferred, so original stays cached)
+        currentWorker.postMessage({ type: 'init', wasmBinary } satisfies WorkerRequest);
       });
       
       workerReady = true;

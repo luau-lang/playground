@@ -21,7 +21,7 @@ let modulePromise: Promise<LuauWasmModule> | null = null;
 
 // Message types for worker communication
 export type WorkerRequest = 
-  | { type: 'init'; baseUrl: string }
+  | { type: 'init'; wasmBinary: ArrayBuffer }
   | { type: 'execute'; code: string }
   | { type: 'getDiagnostics'; code: string }
   | { type: 'autocomplete'; code: string; line: number; col: number }
@@ -53,20 +53,19 @@ export type WorkerResponse =
   | { type: 'registerSources'; success: boolean }
   | { type: 'error'; error: string; requestType?: string };
 
-let baseUrl = '';
+let cachedWasmBinary: ArrayBuffer | null = null;
 
 async function loadModule(): Promise<LuauWasmModule> {
   if (wasmModule) return wasmModule;
   if (modulePromise) return modulePromise;
 
+  if (!cachedWasmBinary) {
+    throw new Error('WASM binary not initialized - call init first');
+  }
+
   modulePromise = (async () => {
     const module = await (createLuauModuleFactory as CreateLuauModule)({
-      locateFile: (path: string) => {
-        if (path.endsWith('.wasm')) {
-          return `${baseUrl}/wasm/luau.wasm`;
-        }
-        return `${baseUrl}/wasm/${path}`;
-      },
+      wasmBinary: new Uint8Array(cachedWasmBinary!),
     });
 
     wasmModule = module;
@@ -88,7 +87,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
   try {
     switch (request.type) {
       case 'init': {
-        baseUrl = request.baseUrl;
+        cachedWasmBinary = request.wasmBinary;
         await loadModule();
         respond({ type: 'ready' }, requestId);
         break;
