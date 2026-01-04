@@ -59,6 +59,10 @@
       case "boolean":
         return String(value.value);
       case "number":
+        // Handle special float values (inf, -inf, nan) which are serialized as strings
+        if (typeof value.value === "string") {
+          return value.value;
+        }
         return String(value.value);
       case "string":
         return isTopLevel && keyName === undefined

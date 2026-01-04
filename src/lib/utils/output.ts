@@ -4,10 +4,13 @@
  * Shared helpers for formatting execution output and timing.
  */
 
+/** Special float values that can't be represented as JSON numbers */
+export type SpecialFloat = 'inf' | '-inf' | 'nan';
+
 export type LuauValue = 
   | { type: 'nil' }
   | { type: 'boolean'; value: boolean }
-  | { type: 'number'; value: number }
+  | { type: 'number'; value: number | SpecialFloat }
   | { type: 'string'; value: string }
   | { type: 'table'; value: Record<string, LuauValue> | LuauValue[]; isArray: boolean }
   | { type: 'function' }
