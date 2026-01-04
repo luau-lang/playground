@@ -40,13 +40,14 @@ function getWasmBinary(): Promise<ArrayBuffer> {
 let worker: Worker | null = null;
 let workerReady = false;
 let workerReadyPromise: Promise<void> | null = null;
+let initAbortController: AbortController | null = null;
 
-// Run ID to track and cancel specific runs
+// Run ID to track and cancel specific runs (only incremented by runCode/checkCode)
 let currentRunId = 0;
 
 // Pending requests waiting for responses
 const pendingRequests = new Map<string, {
-  resolve: (value: unknown) => void;
+  resolve: (value: WorkerResponse) => void;
   reject: (error: Error) => void;
 }>();
 
@@ -68,10 +69,10 @@ function rejectAllPending(error: Error): void {
 function createWorker(): Worker {
   const newWorker = new LuauWorker();
   
-  newWorker.onmessage = (e: MessageEvent<WorkerResponse & { requestId?: string }>) => {
+  newWorker.onmessage = (e: MessageEvent<WorkerResponse & { requestId: string }>) => {
     const { requestId, ...response } = e.data;
     
-    if (requestId && pendingRequests.has(requestId)) {
+    if (pendingRequests.has(requestId)) {
       const { resolve, reject } = pendingRequests.get(requestId)!;
       pendingRequests.delete(requestId);
       
@@ -91,10 +92,16 @@ function createWorker(): Worker {
   return newWorker;
 }
 
+// Type mapping from request type to response type
+type ResponseForRequest<T extends WorkerRequest['type']> = Extract<WorkerResponse, { type: T }>;
+
 /**
- * Send a request to the worker and wait for a response.
+ * Send a request to the worker and wait for a typed response.
  */
-async function sendRequest<T extends WorkerRequest>(request: T): Promise<WorkerResponse> {
+async function sendRequest<K extends WorkerRequest['type']>(
+  type: K,
+  params: Omit<Extract<WorkerRequest, { type: K }>, 'type'>
+): Promise<ResponseForRequest<K>> {
   await loadLuauWasm();
   
   if (!worker) {
@@ -102,6 +109,7 @@ async function sendRequest<T extends WorkerRequest>(request: T): Promise<WorkerR
   }
   
   const requestId = `req_${requestIdCounter++}`;
+  const request = { type, ...params } as WorkerRequest;
   
   return new Promise((resolve, reject) => {
     if (!worker) {
@@ -110,7 +118,7 @@ async function sendRequest<T extends WorkerRequest>(request: T): Promise<WorkerR
     }
     
     pendingRequests.set(requestId, { 
-      resolve: resolve as (value: unknown) => void, 
+      resolve: resolve as (value: WorkerResponse) => void, 
       reject 
     });
     worker.postMessage({ ...request, requestId });
@@ -129,6 +137,10 @@ export async function loadLuauWasm(): Promise<void> {
     return workerReadyPromise;
   }
 
+  // Create abort controller for this initialization
+  initAbortController = new AbortController();
+  const { signal } = initAbortController;
+
   workerReadyPromise = (async () => {
     try {
       // Start WASM download and worker creation in parallel
@@ -137,7 +149,7 @@ export async function loadLuauWasm(): Promise<void> {
       
       const wasmBinary = await binaryPromise;
       
-      if (!worker) {
+      if (signal.aborted || !worker) {
         throw new Error('Execution stopped');
       }
       
@@ -145,41 +157,56 @@ export async function loadLuauWasm(): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Worker initialization timeout'));
-        }, 30000);
+        }, 10000);
+        
+        // Listen for abort
+        const onAbort = () => {
+          clearTimeout(timeout);
+          reject(new Error('Execution stopped'));
+        };
+        signal.addEventListener('abort', onAbort);
         
         const requestId = `init_${requestIdCounter++}`;
         pendingRequests.set(requestId, {
           resolve: () => {
             clearTimeout(timeout);
+            signal.removeEventListener('abort', onAbort);
             resolve();
           },
           reject: (err) => {
             clearTimeout(timeout);
+            signal.removeEventListener('abort', onAbort);
             reject(err);
           }
         });
         
-        worker!.postMessage({ type: 'init', wasmBinary, requestId } satisfies WorkerRequest & { requestId: string });
+        // Use Transferable to avoid copying the ArrayBuffer
+        worker!.postMessage(
+          { type: 'init', wasmBinary, requestId } satisfies WorkerRequest & { requestId: string },
+          [wasmBinary]
+        );
       });
       
-      if (!worker) {
+      if (signal.aborted || !worker) {
         throw new Error('Execution stopped');
       }
       
       workerReady = true;
+      initAbortController = null;
       console.log('[Luau WASM] Worker ready');
       
       // Sync settings to worker
       const currentSettings = get(settings);
       const modeNum = currentSettings.mode === 'strict' ? 1 : currentSettings.mode === 'nocheck' ? 2 : 0;
-      await sendRequest({ type: 'setMode', mode: modeNum });
-      await sendRequest({ type: 'setSolver', isNew: currentSettings.solver === 'new' });
+      await sendRequest('setMode', { mode: modeNum });
+      await sendRequest('setSolver', { isNew: currentSettings.solver === 'new' });
       
       // Start listening to settings changes
       initSettingsSync();
     } catch (error) {
       workerReadyPromise = null;
       workerReady = false;
+      initAbortController = null;
       
       if (error instanceof Error && error.message === 'Execution stopped') {
         throw error;
@@ -204,8 +231,11 @@ export function isWasmLoaded(): boolean {
 export function stopExecution(): void {
   console.log('[Luau WASM] Stopping execution...');
   
-  // Increment run ID to invalidate any in-progress runs
-  currentRunId++;
+  // Abort any in-progress initialization
+  if (initAbortController) {
+    initAbortController.abort();
+    initAbortController = null;
+  }
   
   // Reset initialization state
   workerReadyPromise = null;
@@ -231,24 +261,15 @@ export function stopExecution(): void {
  */
 export async function executeCode(code: string): Promise<{ result: ExecuteResult; elapsed: number }> {
   try {
-    const response = await sendRequest({ type: 'execute', code });
-    if (response.type === 'execute') {
-      return { result: response.result, elapsed: response.elapsed };
-    }
-    return { result: { success: false, output: '', error: 'Unexpected response type' }, elapsed: 0 };
+    const response = await sendRequest('execute', { code });
+    return { result: response.result, elapsed: response.elapsed };
   } catch (error) {
     // Check if this was a stop - don't return an error for that
     if (error instanceof Error && error.message === 'Execution stopped') {
       return { result: { success: false, output: '', error: undefined }, elapsed: 0 };
     }
     
-    let errorMsg = 'Unknown execution error';
-    if (error instanceof Error) {
-      errorMsg = error.message;
-    } else {
-      errorMsg = String(error);
-    }
-    
+    const errorMsg = error instanceof Error ? error.message : String(error);
     return {
       result: { success: false, output: '', error: errorMsg },
       elapsed: 0,
@@ -258,21 +279,19 @@ export async function executeCode(code: string): Promise<{ result: ExecuteResult
 
 /**
  * Get diagnostics for code.
+ * Returns both diagnostics and elapsed time from the worker.
  */
-export async function getDiagnostics(code: string): Promise<LuauDiagnostic[]> {
+export async function getDiagnostics(code: string): Promise<{ diagnostics: LuauDiagnostic[]; elapsed: number }> {
   try {
     // Register all files for cross-file type checking
     const allFiles = getAllFiles();
-    await sendRequest({ type: 'registerSources', sources: allFiles });
+    await sendRequest('registerSources', { sources: allFiles });
     
-    const response = await sendRequest({ type: 'getDiagnostics', code });
-    if (response.type === 'getDiagnostics') {
-      return response.result.diagnostics;
-    }
-    return [];
+    const response = await sendRequest('getDiagnostics', { code });
+    return { diagnostics: response.result.diagnostics, elapsed: response.elapsed };
   } catch (error) {
     console.error('[Luau] Diagnostics error:', error);
-    return [];
+    return { diagnostics: [], elapsed: 0 };
   }
 }
 
@@ -281,11 +300,8 @@ export async function getDiagnostics(code: string): Promise<LuauDiagnostic[]> {
  */
 export async function getAutocomplete(code: string, line: number, col: number): Promise<LuauCompletion[]> {
   try {
-    const response = await sendRequest({ type: 'autocomplete', code, line, col });
-    if (response.type === 'autocomplete') {
-      return response.result.items;
-    }
-    return [];
+    const response = await sendRequest('autocomplete', { code, line, col });
+    return response.result.items;
   } catch (error) {
     console.error('[Luau] Autocomplete error:', error);
     return [];
@@ -297,11 +313,8 @@ export async function getAutocomplete(code: string, line: number, col: number): 
  */
 export async function getHover(code: string, line: number, col: number): Promise<string | null> {
   try {
-    const response = await sendRequest({ type: 'hover', code, line, col });
-    if (response.type === 'hover') {
-      return response.result.content;
-    }
-    return null;
+    const response = await sendRequest('hover', { code, line, col });
+    return response.result.content;
   } catch (error) {
     console.error('[Luau] Hover error:', error);
     return null;
@@ -313,7 +326,7 @@ export async function getHover(code: string, line: number, col: number): Promise
  */
 export async function addModule(name: string, source: string): Promise<void> {
   try {
-    await sendRequest({ type: 'addModule', name, source });
+    await sendRequest('addModule', { name, source });
   } catch (error) {
     console.error('[Luau] Failed to add module:', error);
   }
@@ -324,7 +337,7 @@ export async function addModule(name: string, source: string): Promise<void> {
  */
 export async function clearModules(): Promise<void> {
   try {
-    await sendRequest({ type: 'clearModules' });
+    await sendRequest('clearModules', {});
   } catch (error) {
     console.error('[Luau] Failed to clear modules:', error);
   }
@@ -335,11 +348,8 @@ export async function clearModules(): Promise<void> {
  */
 export async function getAvailableModules(): Promise<string[]> {
   try {
-    const response = await sendRequest({ type: 'getModules' });
-    if (response.type === 'getModules') {
-      return response.result.modules;
-    }
-    return [];
+    const response = await sendRequest('getModules', {});
+    return response.result.modules;
   } catch (error) {
     console.error('[Luau] Failed to get modules:', error);
     return [];
@@ -351,7 +361,7 @@ export async function getAvailableModules(): Promise<string[]> {
  */
 export async function setSource(name: string, source: string): Promise<void> {
   try {
-    await sendRequest({ type: 'setSource', name, source });
+    await sendRequest('setSource', { name, source });
   } catch (error) {
     console.error('[Luau] Failed to set source:', error);
   }
@@ -363,7 +373,7 @@ export async function setSource(name: string, source: string): Promise<void> {
 export async function setLuauMode(mode: LuauMode): Promise<void> {
   const modeNum = mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
   try {
-    await sendRequest({ type: 'setMode', mode: modeNum });
+    await sendRequest('setMode', { mode: modeNum });
   } catch (error) {
     console.error('[Luau] Failed to set mode:', error);
   }
@@ -374,7 +384,7 @@ export async function setLuauMode(mode: LuauMode): Promise<void> {
  */
 export async function setLuauSolver(solver: SolverMode): Promise<void> {
   try {
-    await sendRequest({ type: 'setSolver', isNew: solver === 'new' });
+    await sendRequest('setSolver', { isNew: solver === 'new' });
   } catch (error) {
     console.error('[Luau] Failed to set solver:', error);
   }
@@ -422,7 +432,7 @@ export async function runCode(): Promise<void> {
     
     // Register all files as modules for require support
     const allFiles = getAllFiles();
-    await sendRequest({ type: 'registerModules', modules: allFiles });
+    await sendRequest('registerModules', { modules: allFiles });
     
     // Check if this run was cancelled
     if (currentRunId !== myRunId) return;
@@ -482,10 +492,8 @@ export async function checkCode(): Promise<void> {
     
     appendOutput({ type: 'log', text: `Type checking ${fileName}...` });
     
-    // Measure check time
-    const startTime = performance.now();
-    const diagnostics = await getDiagnostics(code);
-    const elapsed = performance.now() - startTime;
+    // Get diagnostics with timing from worker
+    const { diagnostics, elapsed } = await getDiagnostics(code);
     
     // Check if this run was cancelled
     if (currentRunId !== myRunId) return;
@@ -537,18 +545,14 @@ export async function getBytecode(
   showRemarks: boolean = false
 ): Promise<{ success: boolean; bytecode: string; error?: string }> {
   try {
-    const response = await sendRequest({ 
-      type: 'getBytecode', 
+    const response = await sendRequest('getBytecode', { 
       code, 
       optimizationLevel, 
       debugLevel, 
       outputFormat, 
       showRemarks 
     });
-    if (response.type === 'getBytecode') {
-      return response.result;
-    }
-    return { success: false, bytecode: '', error: 'Unexpected response type' };
+    return response.result;
   } catch (error) {
     return {
       success: false,

@@ -39,7 +39,7 @@ export type WorkerRequest =
 export type WorkerResponse = 
   | { type: 'ready' }
   | { type: 'execute'; result: ExecuteResult; elapsed: number }
-  | { type: 'getDiagnostics'; result: DiagnosticsResult }
+  | { type: 'getDiagnostics'; result: DiagnosticsResult; elapsed: number }
   | { type: 'autocomplete'; result: AutocompleteResult }
   | { type: 'hover'; result: HoverResult }
   | { type: 'addModule'; success: boolean }
@@ -51,7 +51,7 @@ export type WorkerResponse =
   | { type: 'getBytecode'; result: { success: boolean; bytecode: string; error?: string } }
   | { type: 'registerModules'; success: boolean }
   | { type: 'registerSources'; success: boolean }
-  | { type: 'error'; error: string; requestType?: string };
+  | { type: 'error'; error: string };
 
 let cachedWasmBinary: ArrayBuffer | null = null;
 
@@ -69,6 +69,8 @@ async function loadModule(): Promise<LuauWasmModule> {
     });
 
     wasmModule = module;
+    // Free the buffer now that module is loaded - it's held internally by WASM
+    cachedWasmBinary = null;
     return module;
   })();
 
@@ -85,20 +87,23 @@ function registerFile(
   content: string,
   fn: 'luau_add_module' | 'luau_set_source'
 ): void {
-  module.ccall(fn, null, ['string', 'string'], [name, content]);
+  // Use type assertion since ccall has strict overloads but we know these are valid
+  type CCall = (fn: string, ret: null, types: string[], args: string[]) => void;
+  const call = module.ccall as unknown as CCall;
+  call(fn, null, ['string', 'string'], [name, content]);
   const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
   if (nameWithoutExt !== name) {
-    module.ccall(fn, null, ['string', 'string'], [nameWithoutExt, content]);
+    call(fn, null, ['string', 'string'], [nameWithoutExt, content]);
   }
 }
 
 // Helper to send response with requestId
-function respond(response: WorkerResponse, requestId?: string): void {
-  self.postMessage(requestId ? { ...response, requestId } : response);
+function respond(response: WorkerResponse, requestId: string): void {
+  self.postMessage({ ...response, requestId });
 }
 
 // Handle messages from main thread
-self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>) => {
+self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) => {
   const { requestId, ...request } = e.data;
   
   try {
@@ -130,9 +135,11 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
       
       case 'getDiagnostics': {
         const module = await loadModule();
+        const startTime = performance.now();
         const resultJson = module.ccall('luau_get_diagnostics', 'string', ['string'], [request.code]);
+        const elapsed = performance.now() - startTime;
         const result = JSON.parse(resultJson) as DiagnosticsResult;
-        respond({ type: 'getDiagnostics', result }, requestId);
+        respond({ type: 'getDiagnostics', result, elapsed }, requestId);
         break;
       }
       
@@ -228,6 +235,12 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
         respond({ type: 'registerSources', success: true }, requestId);
         break;
       }
+      
+      default: {
+        const exhaustiveCheck: never = request;
+        respond({ type: 'error', error: `Unknown request type: ${(exhaustiveCheck as WorkerRequest).type}` }, requestId);
+        break;
+      }
     }
   } catch (error) {
     let errorMsg = 'Unknown error';
@@ -238,11 +251,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
     } else {
       errorMsg = String(error);
     }
-    respond({ 
-      type: 'error', 
-      error: errorMsg,
-      requestType: request.type
-    }, requestId);
+    respond({ type: 'error', error: errorMsg }, requestId);
   }
 };
 
