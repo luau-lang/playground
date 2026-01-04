@@ -18,29 +18,41 @@ import LuauWorker from './luau.worker?worker';
 
 declare const __wasmPromises: { luau: Promise<ArrayBuffer> } | undefined;
 
-// Cached WASM binary promise - survives worker restarts
-let wasmBinaryPromise: Promise<ArrayBuffer> | null = null;
+const STOPPED_ERROR = 'Execution stopped';
+
+// Cached WASM binary - stored as Uint8Array so it can be cloned for transfers
+let cachedWasmBinary: Uint8Array | null = null;
+let wasmBinaryLoading: Promise<Uint8Array> | null = null;
 
 /**
  * Get the WASM binary, using preloaded promise from index.html or fetching once.
+ * Returns a fresh clone each time to support Transferable usage.
  */
-function getWasmBinary(): Promise<ArrayBuffer> {
-  if (!wasmBinaryPromise) {
-    if (typeof __wasmPromises !== 'undefined') {
-      wasmBinaryPromise = __wasmPromises.luau;
-    } else {
-      const baseUrl = new URL('./', document.baseURI).href.replace(/\/$/, '');
-      wasmBinaryPromise = fetch(`${baseUrl}/wasm/luau.wasm`).then(r => r.arrayBuffer());
+async function getWasmBinary(): Promise<ArrayBuffer> {
+  if (!cachedWasmBinary) {
+    if (!wasmBinaryLoading) {
+      wasmBinaryLoading = (async () => {
+        let buffer: ArrayBuffer;
+        if (typeof __wasmPromises !== 'undefined') {
+          buffer = await __wasmPromises.luau;
+        } else {
+          const baseUrl = new URL('./', document.baseURI).href.replace(/\/$/, '');
+          buffer = await fetch(`${baseUrl}/wasm/luau.wasm`).then(r => r.arrayBuffer());
+        }
+        cachedWasmBinary = new Uint8Array(buffer);
+        return cachedWasmBinary;
+      })();
     }
+    await wasmBinaryLoading;
   }
-  return wasmBinaryPromise;
+  // Return a clone so the original survives Transferable
+  return cachedWasmBinary!.slice().buffer;
 }
 
 // Worker instance and state
 let worker: Worker | null = null;
 let workerReady = false;
 let workerReadyPromise: Promise<void> | null = null;
-let initAbortController: AbortController | null = null;
 
 // Run ID to track and cancel specific runs (only incremented by runCode/checkCode)
 let currentRunId = 0;
@@ -72,14 +84,13 @@ function createWorker(): Worker {
   newWorker.onmessage = (e: MessageEvent<WorkerResponse & { requestId: string }>) => {
     const { requestId, ...response } = e.data;
     
-    if (pendingRequests.has(requestId)) {
-      const { resolve, reject } = pendingRequests.get(requestId)!;
+    const pending = pendingRequests.get(requestId);
+    if (pending) {
       pendingRequests.delete(requestId);
-      
       if (response.type === 'error') {
-        reject(new Error(response.error));
+        pending.reject(new Error(response.error));
       } else {
-        resolve(response);
+        pending.resolve(response);
       }
     }
   };
@@ -97,23 +108,21 @@ type ResponseForRequest<T extends WorkerRequest['type']> = Extract<WorkerRespons
 
 /**
  * Send a request to the worker and wait for a typed response.
+ * Lazily initializes the worker if needed (supports recovery after stop).
  */
 async function sendRequest<K extends WorkerRequest['type']>(
   type: K,
   params: Omit<Extract<WorkerRequest, { type: K }>, 'type'>
 ): Promise<ResponseForRequest<K>> {
+  // Ensure worker is ready (will reinitialize if previously stopped)
   await loadLuauWasm();
-  
-  if (!worker) {
-    throw new Error('Execution stopped');
-  }
   
   const requestId = `req_${requestIdCounter++}`;
   const request = { type, ...params } as WorkerRequest;
   
   return new Promise((resolve, reject) => {
     if (!worker) {
-      reject(new Error('Execution stopped'));
+      reject(new Error(STOPPED_ERROR));
       return;
     }
     
@@ -126,7 +135,31 @@ async function sendRequest<K extends WorkerRequest['type']>(
 }
 
 /**
+ * Initialize the worker with the WASM binary.
+ */
+async function initializeWorker(wasmBinary: ArrayBuffer): Promise<void> {
+  const requestId = `init_${requestIdCounter++}`;
+  
+  return new Promise((resolve, reject) => {
+    const signal = AbortSignal.timeout(10000);
+    signal.addEventListener('abort', () => reject(new Error('Worker initialization timeout')));
+    
+    pendingRequests.set(requestId, {
+      resolve: () => resolve(),
+      reject,
+    });
+    
+    // Transfer the ArrayBuffer to avoid copying
+    worker!.postMessage(
+      { type: 'init', wasmBinary, requestId } satisfies WorkerRequest & { requestId: string },
+      [wasmBinary]
+    );
+  });
+}
+
+/**
  * Load/initialize the Luau WASM worker.
+ * Can be called multiple times - will reinitialize if worker was stopped.
  */
 export async function loadLuauWasm(): Promise<void> {
   if (workerReady && worker) {
@@ -137,10 +170,6 @@ export async function loadLuauWasm(): Promise<void> {
     return workerReadyPromise;
   }
 
-  // Create abort controller for this initialization
-  initAbortController = new AbortController();
-  const { signal } = initAbortController;
-
   workerReadyPromise = (async () => {
     try {
       // Start WASM download and worker creation in parallel
@@ -149,50 +178,17 @@ export async function loadLuauWasm(): Promise<void> {
       
       const wasmBinary = await binaryPromise;
       
-      if (signal.aborted || !worker) {
-        throw new Error('Execution stopped');
+      if (!worker) {
+        throw new Error(STOPPED_ERROR);
       }
       
-      // Wait for worker to initialize with WASM
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Worker initialization timeout'));
-        }, 10000);
-        
-        // Listen for abort
-        const onAbort = () => {
-          clearTimeout(timeout);
-          reject(new Error('Execution stopped'));
-        };
-        signal.addEventListener('abort', onAbort);
-        
-        const requestId = `init_${requestIdCounter++}`;
-        pendingRequests.set(requestId, {
-          resolve: () => {
-            clearTimeout(timeout);
-            signal.removeEventListener('abort', onAbort);
-            resolve();
-          },
-          reject: (err) => {
-            clearTimeout(timeout);
-            signal.removeEventListener('abort', onAbort);
-            reject(err);
-          }
-        });
-        
-        // Use Transferable to avoid copying the ArrayBuffer
-        worker!.postMessage(
-          { type: 'init', wasmBinary, requestId } satisfies WorkerRequest & { requestId: string },
-          [wasmBinary]
-        );
-      });
+      await initializeWorker(wasmBinary);
       
-      if (signal.aborted || !worker) {
-        throw new Error('Execution stopped');
+      if (!worker) {
+        throw new Error(STOPPED_ERROR);
       }
       
       workerReady = true;
-      initAbortController = null;
       console.log('[Luau WASM] Worker ready');
       
       // Sync settings to worker
@@ -206,9 +202,8 @@ export async function loadLuauWasm(): Promise<void> {
     } catch (error) {
       workerReadyPromise = null;
       workerReady = false;
-      initAbortController = null;
       
-      if (error instanceof Error && error.message === 'Execution stopped') {
+      if (error instanceof Error && error.message === STOPPED_ERROR) {
         throw error;
       }
       throw new Error('Failed to load Luau WASM module', { cause: error });
@@ -227,17 +222,12 @@ export function isWasmLoaded(): boolean {
 
 /**
  * Stop any running execution by terminating the worker.
+ * The worker will be reinitialized on the next request.
  */
 export function stopExecution(): void {
   console.log('[Luau WASM] Stopping execution...');
   
-  // Abort any in-progress initialization
-  if (initAbortController) {
-    initAbortController.abort();
-    initAbortController = null;
-  }
-  
-  // Reset initialization state
+  // Reset initialization state so worker can be recreated
   workerReadyPromise = null;
   workerReady = false;
   
@@ -248,11 +238,11 @@ export function stopExecution(): void {
   }
   
   // Reject all pending requests
-  rejectAllPending(new Error('Execution stopped'));
+  rejectAllPending(new Error(STOPPED_ERROR));
   
   // Update running state
   setRunning(false);
-  appendOutput({ type: 'warn', text: 'Execution stopped' });
+  appendOutput({ type: 'warn', text: STOPPED_ERROR });
 }
 
 /**
@@ -265,7 +255,7 @@ export async function executeCode(code: string): Promise<{ result: ExecuteResult
     return { result: response.result, elapsed: response.elapsed };
   } catch (error) {
     // Check if this was a stop - don't return an error for that
-    if (error instanceof Error && error.message === 'Execution stopped') {
+    if (error instanceof Error && error.message === STOPPED_ERROR) {
       return { result: { success: false, output: '', error: undefined }, elapsed: 0 };
     }
     
@@ -462,7 +452,7 @@ export async function runCode(): Promise<void> {
     }
   } catch (error) {
     // Only show error if this run wasn't cancelled and not a "stopped" error
-    if (currentRunId === myRunId && error instanceof Error && error.message !== 'Execution stopped') {
+    if (currentRunId === myRunId && error instanceof Error && error.message !== STOPPED_ERROR) {
       appendOutput({
         type: 'error',
         text: `Error: ${error.message}`,
@@ -521,7 +511,7 @@ export async function checkCode(): Promise<void> {
     }
   } catch (error) {
     // Only show error if this run wasn't cancelled and not a "stopped" error
-    if (currentRunId === myRunId && error instanceof Error && error.message !== 'Execution stopped') {
+    if (currentRunId === myRunId && error instanceof Error && error.message !== STOPPED_ERROR) {
       appendOutput({
         type: 'error',
         text: `Error: ${error.message}`,

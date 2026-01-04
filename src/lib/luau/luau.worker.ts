@@ -53,7 +53,7 @@ export type WorkerResponse =
   | { type: 'registerSources'; success: boolean }
   | { type: 'error'; error: string };
 
-let cachedWasmBinary: ArrayBuffer | null = null;
+let cachedWasmBinary: Uint8Array | null = null;
 
 async function loadModule(): Promise<LuauWasmModule> {
   if (wasmModule) return wasmModule;
@@ -65,7 +65,7 @@ async function loadModule(): Promise<LuauWasmModule> {
 
   modulePromise = (async () => {
     const module = await (createLuauModuleFactory as CreateLuauModule)({
-      wasmBinary: new Uint8Array(cachedWasmBinary!),
+      wasmBinary: cachedWasmBinary!,
     });
 
     wasmModule = module;
@@ -109,7 +109,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
   try {
     switch (request.type) {
       case 'init': {
-        cachedWasmBinary = request.wasmBinary;
+        // Convert transferred ArrayBuffer to Uint8Array for Emscripten
+        cachedWasmBinary = new Uint8Array(request.wasmBinary);
         await loadModule();
         respond({ type: 'ready' }, requestId);
         break;
