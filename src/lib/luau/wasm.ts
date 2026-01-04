@@ -16,7 +16,7 @@ import type {
 import type { WorkerRequest, WorkerResponse } from './luau.worker';
 import LuauWorker from './luau.worker?worker';
 
-declare const __wasmPromises: { onig: Promise<ArrayBuffer>; luau: Promise<ArrayBuffer> } | undefined;
+declare const __wasmPromises: { luau: Promise<ArrayBuffer> } | undefined;
 
 // Cached WASM binary promise - survives worker restarts
 let wasmBinaryPromise: Promise<ArrayBuffer> | null = null;

@@ -3,14 +3,15 @@
  * 
  * Uses vscode-textmate with the official Luau.tmLanguage grammar
  * from https://github.com/JohnnyMorganz/Luau.tmLanguage
+ * 
+ * Regex patterns are pre-compiled by compile-grammar.ts vite plugin
+ * This eliminates the need for oniguruma WASM at runtime.
  */
 
 import { StreamLanguage, LanguageSupport, type StringStream } from '@codemirror/language';
 import * as vsctm from 'vscode-textmate';
-import * as oniguruma from 'vscode-oniguruma';
+import { createJsOnigLib } from './js-regex-engine';
 import luauGrammar from './Luau.tmLanguage.json';
-
-declare const __wasmPromises: { onig: Promise<ArrayBuffer>; luau: Promise<ArrayBuffer> } | undefined;
 
 // Singleton state
 let registry: vsctm.Registry | null = null;
@@ -44,22 +45,12 @@ async function initTextMate(): Promise<void> {
   }
   
   initPromise = (async () => {
-    // Load oniguruma WASM (use preloaded promise from HTML if available)
-    const wasmBuffer = await (typeof __wasmPromises !== 'undefined'
-      ? __wasmPromises.onig
-      : fetch('/wasm/onig.wasm').then(r => r.arrayBuffer()));
-    
-    await oniguruma.loadWASM(wasmBuffer);
-    
     // Grammar is bundled - convert to string for parsing
     const grammarJson = JSON.stringify(luauGrammar);
     
-    // Create the registry
+    // Create the registry with JS-based regex engine (no WASM needed)
     registry = new vsctm.Registry({
-      onigLib: Promise.resolve({
-        createOnigScanner: (sources) => new oniguruma.OnigScanner(sources),
-        createOnigString: (str) => new oniguruma.OnigString(str),
-      }),
+      onigLib: createJsOnigLib(),
       loadGrammar: async (scopeName) => {
         if (scopeName === 'source.luau') {
           return vsctm.parseRawGrammar(grammarJson, 'Luau.tmLanguage.json');
@@ -75,7 +66,7 @@ async function initTextMate(): Promise<void> {
       throw new Error('Failed to load Luau grammar');
     }
     
-    console.log('[TextMate] Luau grammar loaded successfully');
+    console.log('[TextMate] Luau grammar loaded successfully (JS regex engine)');
     
     // Notify all callbacks
     for (const callback of onReadyCallbacks) {
