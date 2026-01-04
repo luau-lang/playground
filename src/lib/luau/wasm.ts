@@ -19,7 +19,7 @@ import type {
 } from './types';
 import createLuauModule from './luau-module.js';
 
-declare const __wasmPromises: { onig: Promise<ArrayBuffer>; luau: Promise<ArrayBuffer> } | undefined;
+declare const __wasmPromises: { luau: Promise<ArrayBuffer> } | undefined;
 
 let wasmModule: LuauWasmModule | null = null;
 let modulePromise: Promise<LuauWasmModule> | null = null;

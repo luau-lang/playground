@@ -20,9 +20,8 @@
         }
         document.documentElement.style.background = isDark ? '#0a0a0f' : '#fafafa';
       })();
-      // Start WASM fetches immediately (before module scripts load)
+      // Start WASM fetch immediately (before module scripts load)
       window.__wasmPromises = {
-        onig: fetch('/wasm/onig.wasm').then(function (r) { return r.arrayBuffer(); }),
         luau: fetch('/wasm/luau.wasm').then(function(r) { return r.arrayBuffer(); })
       };
     </script>
