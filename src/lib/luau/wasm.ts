@@ -41,6 +41,12 @@ let worker: Worker | null = null;
 let workerReady = false;
 let workerReadyPromise: Promise<void> | null = null;
 
+// Cancellation mechanism - reject function for the current initialization
+let cancelCurrentInit: ((error: Error) => void) | null = null;
+
+// Run ID to track and cancel specific runs
+let currentRunId = 0;
+
 // Pending requests waiting for responses
 const pendingRequests = new Map<string, {
   resolve: (value: unknown) => void;
@@ -82,10 +88,10 @@ function createWorker(): Worker {
   newWorker.onerror = (e) => {
     console.error('[Luau WASM] Worker error:', e);
     // Reject all pending requests
-    for (const [id, { reject }] of pendingRequests) {
+    for (const { reject } of pendingRequests.values()) {
       reject(new Error('Worker error'));
-      pendingRequests.delete(id);
     }
+    pendingRequests.clear();
   };
   
   return newWorker;
@@ -97,14 +103,25 @@ function createWorker(): Worker {
 async function sendRequest<T extends WorkerRequest>(request: T): Promise<WorkerResponse> {
   await loadLuauWasm();
   
+  // Check if worker exists after loading (might have been stopped)
+  if (!worker) {
+    throw new Error('Execution stopped');
+  }
+  
   const requestId = `req_${requestIdCounter++}`;
   
   return new Promise((resolve, reject) => {
+    // Double-check worker still exists (sync check before adding to pending)
+    if (!worker) {
+      reject(new Error('Execution stopped'));
+      return;
+    }
+    
     pendingRequests.set(requestId, { 
       resolve: resolve as (value: unknown) => void, 
       reject 
     });
-    worker!.postMessage({ ...request, requestId });
+    worker.postMessage({ ...request, requestId });
   });
 }
 
@@ -120,12 +137,23 @@ export async function loadLuauWasm(): Promise<void> {
     return workerReadyPromise;
   }
 
-  workerReadyPromise = (async () => {
+  // Create a cancellation promise that can be rejected externally
+  const cancelPromise = new Promise<never>((_, reject) => {
+    cancelCurrentInit = reject;
+  });
+
+  const initPromise = (async () => {
     try {
-      // Start WASM download (uses cached promise, survives worker restarts)
-      const wasmBinary = await getWasmBinary();
-      
+      // Start WASM download and worker creation in parallel
+      const wasmBinaryPromise = getWasmBinary();
       worker = createWorker();
+      
+      const wasmBinary = await wasmBinaryPromise;
+      
+      // Check if worker was terminated while waiting
+      if (!worker) {
+        throw new Error('Initialization cancelled');
+      }
       
       // Wait for worker to be ready
       await new Promise<void>((resolve, reject) => {
@@ -133,11 +161,21 @@ export async function loadLuauWasm(): Promise<void> {
           reject(new Error('Worker initialization timeout'));
         }, 30000);
         
+        // Periodically check if worker was terminated
+        const checkInterval = setInterval(() => {
+          if (!worker) {
+            clearTimeout(timeout);
+            clearInterval(checkInterval);
+            reject(new Error('Initialization cancelled'));
+          }
+        }, 50);
+        
         const currentWorker = worker!;
         const originalOnMessage = currentWorker.onmessage;
         currentWorker.onmessage = (e: MessageEvent<WorkerResponse>) => {
           if (e.data.type === 'ready') {
             clearTimeout(timeout);
+            clearInterval(checkInterval);
             currentWorker.onmessage = originalOnMessage;
             resolve();
           }
@@ -145,9 +183,14 @@ export async function loadLuauWasm(): Promise<void> {
           originalOnMessage?.call(currentWorker, e);
         };
         
-        // Send init message with WASM binary (cloned, not transferred, so original stays cached)
+        // Send init message with WASM binary
         currentWorker.postMessage({ type: 'init', wasmBinary } satisfies WorkerRequest);
       });
+      
+      // Check again after WASM init
+      if (!worker) {
+        throw new Error('Initialization cancelled');
+      }
       
       workerReady = true;
       console.log('[Luau WASM] Module loaded successfully via worker');
@@ -163,9 +206,18 @@ export async function loadLuauWasm(): Promise<void> {
     } catch (error) {
       workerReadyPromise = null;
       workerReady = false;
+      cancelCurrentInit = null;
+      
+      // Re-throw with better message if it's a cancellation
+      if (error instanceof Error && error.message === 'Initialization cancelled') {
+        throw new Error('Execution stopped');
+      }
       throw new Error('Failed to load Luau WASM module', { cause: error });
     }
   })();
+
+  // Race between initialization and cancellation
+  workerReadyPromise = Promise.race([initPromise, cancelPromise]);
 
   return workerReadyPromise;
 }
@@ -180,22 +232,33 @@ export function isWasmLoaded(): boolean {
 /**
  * Stop any running execution by terminating and recreating the worker.
  */
-export async function stopExecution(): Promise<void> {
-  if (!worker) return;
-  
+export function stopExecution(): void {
   console.log('[Luau WASM] Stopping execution...');
   
-  // Terminate the worker
-  worker.terminate();
-  worker = null;
-  workerReady = false;
+  // Increment run ID to invalidate any in-progress runs
+  currentRunId++;
+  
+  // Cancel any pending initialization by rejecting the cancel promise
+  if (cancelCurrentInit) {
+    cancelCurrentInit(new Error('Execution stopped'));
+    cancelCurrentInit = null;
+  }
+  
+  // Reset initialization state
   workerReadyPromise = null;
+  workerReady = false;
+  
+  // Terminate worker if it exists
+  if (worker) {
+    worker.terminate();
+    worker = null;
+  }
   
   // Reject all pending requests
-  for (const [id, { reject }] of pendingRequests) {
+  for (const { reject } of pendingRequests.values()) {
     reject(new Error('Execution stopped'));
-    pendingRequests.delete(id);
   }
+  pendingRequests.clear();
   
   // Update running state
   setRunning(false);
@@ -380,10 +443,20 @@ export function initSettingsSync(): void {
   });
 }
 
+// Synchronous flag to prevent concurrent runs (checked before any async work)
+let isExecuting = false;
+
 /**
  * Run the active file and display output.
  */
 export async function runCode(): Promise<void> {
+  // Synchronous check to prevent concurrent runs
+  if (isExecuting) return;
+  isExecuting = true;
+  
+  // Capture run ID for this execution
+  const myRunId = ++currentRunId;
+  
   setRunning(true);
   clearOutput();
   setExecutionTime(null);
@@ -398,7 +471,13 @@ export async function runCode(): Promise<void> {
     const allFiles = getAllFiles();
     await sendRequest({ type: 'registerModules', modules: allFiles });
     
+    // Check if this run was cancelled
+    if (currentRunId !== myRunId) return;
+    
     const { result, elapsed } = await executeCode(code);
+    
+    // Check if this run was cancelled
+    if (currentRunId !== myRunId) return;
     
     setExecutionTime(elapsed);
     
@@ -419,15 +498,19 @@ export async function runCode(): Promise<void> {
       });
     }
   } catch (error) {
-    // Only show error if not a "stopped" error
-    if (error instanceof Error && error.message !== 'Execution stopped') {
+    // Only show error if this run wasn't cancelled and not a "stopped" error
+    if (currentRunId === myRunId && error instanceof Error && error.message !== 'Execution stopped') {
       appendOutput({
         type: 'error',
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        text: `Error: ${error.message}`,
       });
     }
   } finally {
-    setRunning(false);
+    // Only update state if this is still the current run
+    if (currentRunId === myRunId) {
+      setRunning(false);
+    }
+    isExecuting = false;
   }
 }
 
