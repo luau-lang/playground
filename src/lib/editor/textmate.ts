@@ -18,21 +18,6 @@ let registry: vsctm.Registry | null = null;
 let grammar: vsctm.IGrammar | null = null;
 let initPromise: Promise<void> | null = null;
 
-// Callbacks to notify when grammar is ready
-const onReadyCallbacks: Array<() => void> = [];
-
-/**
- * Register a callback to be called when the grammar is ready.
- */
-export function onGrammarReady(callback: () => void): void {
-  if (grammar) {
-    // Already ready, call immediately
-    callback();
-  } else {
-    onReadyCallbacks.push(callback);
-  }
-}
-
 /**
  * Initialize the TextMate registry and load the Luau grammar.
  */
@@ -67,16 +52,6 @@ async function initTextMate(): Promise<void> {
     }
     
     console.log('[TextMate] Luau grammar loaded successfully (JS regex engine)');
-    
-    // Notify all callbacks
-    for (const callback of onReadyCallbacks) {
-      try {
-        callback();
-      } catch (e) {
-        console.error('[TextMate] Callback error:', e);
-      }
-    }
-    onReadyCallbacks.length = 0;
   })();
   
   await initPromise;
@@ -240,9 +215,3 @@ export async function initLuauTextMate(): Promise<void> {
   }
 }
 
-/**
- * Check if TextMate is ready.
- */
-export function isTextMateReady(): boolean {
-  return grammar !== null;
-}

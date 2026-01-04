@@ -12,7 +12,7 @@ import { bracketMatching, indentOnInput } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 
-import { luauTextMate, onGrammarReady, initLuauTextMate } from './textmate';
+import { luauTextMate, initLuauTextMate } from './textmate';
 export { initLuauTextMate };
 import { darkTheme, lightTheme } from './themes';
 import { luauLspExtensions } from './lspExtensions';
@@ -26,7 +26,6 @@ let onChangeCallback: ((content: string) => void) | null = null;
 
 // Compartments for dynamic reconfiguration
 const themeCompartment = new Compartment();
-const luauCompartment = new Compartment();
 
 // Subscribe to theme changes
 let unsubscribeTheme: (() => void) | null = null;
@@ -67,8 +66,9 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
       indentWithTab,
     ]),
     
-    // Luau language + LSP extensions (added after grammar loads for better LCP)
-    luauCompartment.of([]),
+    // Luau language + LSP extensions
+    luauTextMate(),
+    ...luauLspExtensions(),
     
     // Theme (dynamic)
     themeCompartment.of(getThemeExtension()),
@@ -149,20 +149,6 @@ export function createEditor(
     }
   };
   mediaQuery.addEventListener('change', handleMediaChange);
-
-  // Add language + LSP extensions once grammar is ready
-  onGrammarReady(() => {
-    if (editorView) {
-      editorView.dispatch({
-        effects: luauCompartment.reconfigure([
-          luauTextMate(),
-          ...luauLspExtensions(),
-        ]),
-      });
-
-      console.log('[Editor] Language and LSP extensions loaded');
-    }
-  });
 
   return editorView;
 }

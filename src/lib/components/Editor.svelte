@@ -13,8 +13,8 @@
   onMount(async () => {    
     editorModule = await import('$lib/editor/setup');
     
-    // Initialize TextMate grammar (will notify editor when ready)
-    editorModule.initLuauTextMate().catch(console.error);
+    // Initialize TextMate grammar (no WASM, resolves immediately)
+    await editorModule.initLuauTextMate();
     
     editorModule.createEditor(editorContainer, $files[$activeFile] || '', (content) => {
       if ($activeFile) {
