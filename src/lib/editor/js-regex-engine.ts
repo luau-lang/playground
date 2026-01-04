@@ -5,7 +5,7 @@
  * This eliminates the need for oniguruma-to-es and vscode-oniguruma at runtime.
  */
 
-import { compiledPatterns } from './compiled-patterns';
+import { compiledPatterns } from 'virtual:compiled-patterns';
 
 const MAX = 4294967295;
 

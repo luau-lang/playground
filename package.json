@@ -8,8 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build:wasm": "cd wasm && ./build.sh",
-    "build:grammar": "node scripts/compile-grammar-regexes.js",
-    "prebuild": "npm run build:wasm && npm run build:grammar",
+    "prebuild": "npm run build:wasm",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json"

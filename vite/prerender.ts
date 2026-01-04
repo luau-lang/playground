@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { rmSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { compileGrammarPlugin } from './compile-grammar';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -26,7 +27,7 @@ export function prerenderPlugin(): Plugin {
       // Build SSR version
       await build({
         configFile: false,
-        plugins: [svelte(), tailwindcss()],
+        plugins: [compileGrammarPlugin(), svelte(), tailwindcss()],
         resolve: {
           alias: { '$lib': path.resolve(rootDir, './src/lib') },
         },
