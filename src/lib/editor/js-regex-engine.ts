@@ -1,8 +1,8 @@
 /**
  * Minimal JavaScript regex engine for vscode-textmate.
- * Uses pre-compiled patterns from compile-grammar-regexes.js
+ * Uses pre-compiled patterns from compile-grammar.ts vite plugin
  * 
- * This eliminates the need for oniguruma-to-es and vscode-oniguruma at runtime.
+ * This eliminates the need for oniguruma-to-es, vscode-oniguruma and oniguruma WASM at runtime.
  */
 
 import { compiledPatterns } from 'virtual:compiled-patterns';

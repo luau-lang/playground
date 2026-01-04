@@ -4,7 +4,7 @@
  * Uses vscode-textmate with the official Luau.tmLanguage grammar
  * from https://github.com/JohnnyMorganz/Luau.tmLanguage
  * 
- * Regex patterns are pre-compiled at build time via scripts/compile-grammar-regexes.js
+ * Regex patterns are pre-compiled by compile-grammar.ts vite plugin
  * This eliminates the need for oniguruma WASM at runtime.
  */
 
