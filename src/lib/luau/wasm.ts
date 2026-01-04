@@ -443,14 +443,15 @@ let currentRunId = 0;
 export async function runCode(): Promise<void> {
   const myRunId = ++currentRunId;
   
+  // Set running state before termination to avoid brief isRunning=false gap
+  setRunning(true);
+  clearOutput();
+  setExecutionTime(null);
+  
   // Stop any existing execution silently (not user-initiated)
   if (execution.worker) {
     terminateWorker(execution, CANCELLED_ERROR);
   }
-  
-  setRunning(true);
-  clearOutput();
-  setExecutionTime(null);
 
   try {
     const code = getActiveFileContent();

@@ -81,13 +81,19 @@ function registerFile(
   content: string,
   fn: 'luau_add_module' | 'luau_set_source'
 ): void {
-  // Use type assertion since ccall has strict overloads but we know these are valid
-  type CCall = (fn: string, ret: null, types: string[], args: string[]) => void;
-  const call = module.ccall as unknown as CCall;
-  call(fn, null, ['string', 'string'], [name, content]);
+  // Use type narrowing to satisfy TypeScript's overload resolution
+  const register = (filename: string) => {
+    if (fn === 'luau_add_module') {
+      module.ccall('luau_add_module', null, ['string', 'string'], [filename, content]);
+    } else {
+      module.ccall('luau_set_source', null, ['string', 'string'], [filename, content]);
+    }
+  };
+
+  register(name);
   const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
   if (nameWithoutExt !== name) {
-    call(fn, null, ['string', 'string'], [nameWithoutExt, content]);
+    register(nameWithoutExt);
   }
 }
 
@@ -228,4 +234,3 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
     respond(requestId, { type: 'error', error: errorMsg });
   }
 };
-
