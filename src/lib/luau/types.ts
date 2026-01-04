@@ -54,8 +54,6 @@ export interface SignatureResult {
 export interface LuauWasmModule {
   // Execution
   ccall(name: 'luau_execute', returnType: 'string', argTypes: ['string'], args: [string]): string;
-  ccall(name: 'luau_compile_check', returnType: 'string', argTypes: ['string'], args: [string]): string;
-  ccall(name: 'luau_reset', returnType: null, argTypes: [], args: []): void;
   
   // Module management (for require support)
   ccall(name: 'luau_add_module', returnType: null, argTypes: ['string', 'string'], args: [string, string]): void;
@@ -68,14 +66,10 @@ export interface LuauWasmModule {
   ccall(name: 'luau_autocomplete', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
   ccall(name: 'luau_hover', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
   ccall(name: 'luau_signature_help', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
-  
-  // Utility
-  ccall(name: 'luau_version', returnType: 'string', argTypes: [], args: []): string;
-  
+    
   // Configuration
   ccall(name: 'luau_set_mode', returnType: null, argTypes: ['number'], args: [number]): void;
   ccall(name: 'luau_set_solver', returnType: null, argTypes: ['boolean'], args: [boolean]): void;
-  ccall(name: 'luau_get_config', returnType: 'string', argTypes: [], args: []): string;
   
   // Bytecode
   ccall(name: 'luau_dump_bytecode', returnType: 'string', argTypes: ['string', 'number', 'number', 'number', 'number'], args: [string, number, number, number, number]): string;
@@ -91,10 +85,10 @@ export interface LuauWasmModule {
 }
 
 export type CreateLuauModule = (options?: {
-  locateFile?: (path: string, prefix: string) => string;
-  wasmBinary?: Uint8Array;
-  print?: (text: string) => void;
-  printErr?: (text: string) => void;
+  instantiateWasm?: (
+    imports: WebAssembly.Imports,
+    successCallback: (instance: WebAssembly.Instance) => void
+  ) => WebAssembly.Exports | Record<string, never>;
 }) => Promise<LuauWasmModule>;
 
 declare global {

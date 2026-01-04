@@ -5,7 +5,8 @@
   import { files, activeFile, addFile, removeFile, setActiveFile, renameFile } from '$lib/stores/playground';
   import { showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { toggleTheme, themeMode } from '$lib/utils/theme';
-  import { runCode, checkCode } from '$lib/luau/wasm';
+  import { runCode, checkCode, stopExecution } from '$lib/luau/wasm';
+  import { isRunning } from '$lib/stores/playground';
   import { sharePlayground, generatePlaygroundUrl } from '$lib/utils/share';
   import { isEmbed } from '$lib/stores/embed';
 
@@ -15,6 +16,18 @@
   let editValue = $state('');
   let shareSuccess = $state<boolean | null>(null);
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  
+  // Delay before showing stop button to avoid flash on fast scripts
+  let showStopButton = $state(false);
+  
+  $effect(() => {
+    if (!$isRunning) {
+      showStopButton = false;
+      return;
+    }
+    const timer = setTimeout(() => showStopButton = true, 150);
+    return () => clearTimeout(timer);
+  });
 
   function focusInput(node: HTMLInputElement) {
     node.focus();
@@ -79,7 +92,11 @@
   }
 
   function handleRun() {
-    runCode();
+    if ($isRunning) {
+      stopExecution();
+    } else {
+      runCode();
+    }
   }
 
   function handleCheck() {
@@ -228,9 +245,15 @@
       <span class="hidden sm:inline">Check</span>
       <span class="sm:hidden"><Icon name="check"size={16} /></span>
     </Button>
-    <Button size="sm" onclick={handleRun} class="px-2 sm:px-3" title="Run code">
-      <span class="sm:mr-1"><Icon name="play"size={16} /></span>
-      <span class="hidden sm:inline">Run</span>
+    <Button 
+      size="sm" 
+      variant={showStopButton ? 'secondary' : 'default'} 
+      onclick={handleRun} 
+      class="px-2 sm:px-3" 
+      title={showStopButton ? 'Stop execution' : 'Run code'}
+    >
+      <span class="sm:mr-1"><Icon name={showStopButton ? 'stop' : 'play'} size={16} /></span>
+      <span class="hidden sm:inline">{showStopButton ? 'Stop' : 'Run'}</span>
     </Button>
     {#if $isEmbed}
       <Button size="sm" variant="secondary" onclick={handleOpenInPlayground} class="px-2 sm:px-3" title="Open in playground">
