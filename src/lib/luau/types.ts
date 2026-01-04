@@ -54,8 +54,6 @@ export interface SignatureResult {
 export interface LuauWasmModule {
   // Execution
   ccall(name: 'luau_execute', returnType: 'string', argTypes: ['string'], args: [string]): string;
-  ccall(name: 'luau_compile_check', returnType: 'string', argTypes: ['string'], args: [string]): string;
-  ccall(name: 'luau_reset', returnType: null, argTypes: [], args: []): void;
   
   // Module management (for require support)
   ccall(name: 'luau_add_module', returnType: null, argTypes: ['string', 'string'], args: [string, string]): void;
@@ -68,10 +66,7 @@ export interface LuauWasmModule {
   ccall(name: 'luau_autocomplete', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
   ccall(name: 'luau_hover', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
   ccall(name: 'luau_signature_help', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
-  
-  // Utility
-  ccall(name: 'luau_version', returnType: 'string', argTypes: [], args: []): string;
-  
+    
   // Configuration
   ccall(name: 'luau_set_mode', returnType: null, argTypes: ['number'], args: [number]): void;
   ccall(name: 'luau_set_solver', returnType: null, argTypes: ['boolean'], args: [boolean]): void;

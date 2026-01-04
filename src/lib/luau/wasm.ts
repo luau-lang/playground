@@ -116,12 +116,20 @@ async function initializeWorker(manager: WorkerManager, wasmBinary: ArrayBuffer)
   const requestId = `init_${manager.requestIdCounter++}`;
   
   return new Promise((resolve, reject) => {
-    const signal = AbortSignal.timeout(10000);
-    signal.addEventListener('abort', () => reject(new Error('Worker initialization timeout')));
+    const timer = setTimeout(() => {
+      manager.pendingRequests.delete(requestId);
+      reject(new Error('Worker initialization timeout'));
+    }, 10000);
     
     manager.pendingRequests.set(requestId, {
-      resolve: () => resolve(),
-      reject,
+      resolve: () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      reject: (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
     });
     
     manager.worker!.postMessage(
