@@ -26,7 +26,7 @@ function createLuauLinter() {
     const code = view.state.doc.toString();
     
     try {
-      const luauDiagnostics = await getDiagnostics(code);
+      const { diagnostics: luauDiagnostics } = await getDiagnostics(code);
       
       return luauDiagnostics.map((d: LuauDiagnostic) => {
         // Convert line/column to document positions
