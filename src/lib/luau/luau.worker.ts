@@ -26,10 +26,7 @@ export type WorkerRequest =
   | { type: 'getDiagnostics'; code: string }
   | { type: 'autocomplete'; code: string; line: number; col: number }
   | { type: 'hover'; code: string; line: number; col: number }
-  | { type: 'addModule'; name: string; source: string }
-  | { type: 'clearModules' }
   | { type: 'getModules' }
-  | { type: 'setSource'; name: string; source: string }
   | { type: 'setMode'; mode: number }
   | { type: 'setSolver'; isNew: boolean }
   | { type: 'getBytecode'; code: string; optimizationLevel: number; debugLevel: number; outputFormat: number; showRemarks: boolean }
@@ -42,10 +39,7 @@ export type WorkerResponse =
   | { type: 'getDiagnostics'; result: DiagnosticsResult; elapsed: number }
   | { type: 'autocomplete'; result: AutocompleteResult }
   | { type: 'hover'; result: HoverResult }
-  | { type: 'addModule'; success: boolean }
-  | { type: 'clearModules'; success: boolean }
   | { type: 'getModules'; result: { modules: string[] } }
-  | { type: 'setSource'; success: boolean }
   | { type: 'setMode'; success: boolean }
   | { type: 'setSolver'; success: boolean }
   | { type: 'getBytecode'; result: { success: boolean; bytecode: string; error?: string } }
@@ -160,32 +154,11 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
         break;
       }
       
-      case 'addModule': {
-        const module = await loadModule();
-        module.ccall('luau_add_module', null, ['string', 'string'], [request.name, request.source]);
-        respond(requestId, { type: 'addModule', success: true });
-        break;
-      }
-      
-      case 'clearModules': {
-        const module = await loadModule();
-        module.ccall('luau_clear_modules', null, [], []);
-        respond(requestId, { type: 'clearModules', success: true });
-        break;
-      }
-      
       case 'getModules': {
         const module = await loadModule();
         const resultJson = module.ccall('luau_get_modules', 'string', [], []);
         const result = JSON.parse(resultJson) as { modules: string[] };
         respond(requestId, { type: 'getModules', result });
-        break;
-      }
-      
-      case 'setSource': {
-        const module = await loadModule();
-        module.ccall('luau_set_source', null, ['string', 'string'], [request.name, request.source]);
-        respond(requestId, { type: 'setSource', success: true });
         break;
       }
       

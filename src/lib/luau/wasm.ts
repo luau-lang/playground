@@ -292,13 +292,6 @@ export async function loadLuauWasm(): Promise<void> {
 }
 
 /**
- * Check if analysis worker is loaded (LSP ready).
- */
-export function isWasmLoaded(): boolean {
-  return analysis.ready;
-}
-
-/**
  * Stop any running execution by terminating the execution worker.
  * The analysis worker stays alive for LSP/bytecode operations.
  */
@@ -377,28 +370,6 @@ export async function getHover(code: string, line: number, col: number): Promise
 }
 
 /**
- * Add a module that can be required (for analysis).
- */
-export async function addModule(name: string, source: string): Promise<void> {
-  try {
-    await sendAnalysisRequest('addModule', { name, source });
-  } catch (error) {
-    console.error('[Luau] Failed to add module:', error);
-  }
-}
-
-/**
- * Clear all registered modules.
- */
-export async function clearModules(): Promise<void> {
-  try {
-    await sendAnalysisRequest('clearModules', {});
-  } catch (error) {
-    console.error('[Luau] Failed to clear modules:', error);
-  }
-}
-
-/**
  * Get list of available modules for autocomplete.
  */
 export async function getAvailableModules(): Promise<string[]> {
@@ -408,17 +379,6 @@ export async function getAvailableModules(): Promise<string[]> {
   } catch (error) {
     console.error('[Luau] Failed to get modules:', error);
     return [];
-  }
-}
-
-/**
- * Set source for a file (for analysis).
- */
-export async function setSource(name: string, source: string): Promise<void> {
-  try {
-    await sendAnalysisRequest('setSource', { name, source });
-  } catch (error) {
-    console.error('[Luau] Failed to set source:', error);
   }
 }
 
@@ -450,15 +410,6 @@ export async function setLuauSolver(solver: SolverMode): Promise<void> {
   } catch (error) {
     console.error('[Luau] Failed to set solver:', error);
   }
-}
-
-/**
- * Sync settings from store to WASM workers.
- */
-export async function syncSettings(): Promise<void> {
-  const currentSettings = get(settings);
-  await setLuauMode(currentSettings.mode);
-  await setLuauSolver(currentSettings.solver);
 }
 
 // Subscribe to settings changes and sync to WASM

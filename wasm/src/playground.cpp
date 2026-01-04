@@ -580,25 +580,6 @@ EXPORT const char* luau_execute(const char* code) {
 }
 
 /**
- * Compile code and return bytecode info (for debugging).
- * Returns: { "success": bool, "size": number, "error": string? }
- */
-EXPORT const char* luau_compile_check(const char* code) {
-    size_t bytecodeSize = 0;
-    char* bytecode = luau_compile(code, strlen(code), nullptr, &bytecodeSize);
-    
-    if (!bytecode) {
-        return setResult("{\"success\":false,\"size\":0,\"error\":\"Compilation failed\"}");
-    }
-    
-    free(bytecode);
-    
-    std::ostringstream result;
-    result << "{\"success\":true,\"size\":" << bytecodeSize << "}";
-    return setResult(result.str());
-}
-
-/**
  * Dump bytecode as human-readable text.
  * @param code The Luau source code
  * @param optimizationLevel 0-2 (default 2)
@@ -890,25 +871,6 @@ EXPORT void luau_set_solver(bool useNew) {
 }
 
 /**
- * Get current configuration.
- * Returns: { "mode": "strict"|"nonstrict"|"nocheck", "solver": "new"|"old" }
- */
-EXPORT const char* luau_get_config() {
-    std::string modeStr;
-    switch (g_mode) {
-        case Luau::Mode::Strict: modeStr = "strict"; break;
-        case Luau::Mode::Nonstrict: modeStr = "nonstrict"; break;
-        case Luau::Mode::NoCheck: modeStr = "nocheck"; break;
-        default: modeStr = "nonstrict"; break;
-    }
-    
-    std::ostringstream json;
-    json << "{\"mode\":" << ::json::string(modeStr);
-    json << ",\"solver\":" << ::json::string(g_useNewSolver ? "new" : "old") << "}";
-    return setResult(json.str());
-}
-
-/**
  * Set source for a file (for multi-file analysis).
  */
 EXPORT void luau_set_source(const char* name, const char* source) {
@@ -1088,22 +1050,4 @@ EXPORT const char* luau_hover(const char* code, int line, int col) {
 EXPORT const char* luau_signature_help(const char* code, int line, int col) {
     // Simplified implementation - return empty for now
     return setResult("{\"signatures\":[]}");
-}
-
-/**
- * Reset the analysis state (useful between runs).
- */
-EXPORT void luau_reset() {
-    if (g_frontend) {
-        g_frontend->markDirty("main");
-    }
-    g_outputBuffer.clear();
-    g_modules.clear();
-}
-
-/**
- * Get the Luau version.
- */
-EXPORT const char* luau_version() {
-    return "1.0.0";
 }
