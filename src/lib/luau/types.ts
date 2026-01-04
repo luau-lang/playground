@@ -85,7 +85,6 @@ export interface LuauWasmModule {
 }
 
 export type CreateLuauModule = (options?: {
-  /** Use pre-compiled WebAssembly.Module for instantiation (avoids recompilation) */
   instantiateWasm?: (
     imports: WebAssembly.Imports,
     successCallback: (instance: WebAssembly.Instance) => void
