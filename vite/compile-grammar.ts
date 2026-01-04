@@ -32,6 +32,7 @@ interface GrammarNode {
 
 /**
  * Extract all unique regex patterns from the grammar.
+ * Also generates vscode-textmate's internal transformations for anchored patterns.
  */
 function extractPatterns(obj: unknown, patterns = new Set<string>()): Set<string> {
   if (!obj || typeof obj !== 'object') return patterns;
@@ -45,7 +46,16 @@ function extractPatterns(obj: unknown, patterns = new Set<string>()): Set<string
     // Check for pattern properties
     for (const key of ['match', 'begin', 'end', 'while'] as const) {
       if (typeof node[key] === 'string') {
-        patterns.add(node[key]);
+        const pattern = node[key];
+        patterns.add(pattern);
+        
+        // vscode-textmate transforms \A anchors in patterns when isFirstLine=false
+        // It replaces the 'A' in '\A' with \xFFFF, so \A becomes \￿ (backslash + U+FFFF)
+        // We need to also compile these transformed versions
+        if (pattern.includes('\\A')) {
+          // Replace \A with \￿ (backslash followed by U+FFFF)
+          patterns.add(pattern.replace(/\\A/g, '\\\uFFFF'));
+        }
       }
     }
     // Recurse into nested objects
@@ -65,7 +75,15 @@ function compilePatterns(patterns: string[]): Record<string, [string, string] | 
   
   for (const pattern of patterns) {
     try {
-      const regex = toRegExp(pattern, {
+      // Handle vscode-textmate's anchor transformation
+      // vscode-textmate replaces \A with \￿ (backslash + U+FFFF) when isFirstLine=false
+      // We need to convert it back to \A for oniguruma-to-es compilation
+      let patternToCompile = pattern;
+      if (pattern.includes('\\\uFFFF')) {
+        patternToCompile = pattern.replace(/\\\uFFFF/g, '\\A');
+      }
+      
+      const regex = toRegExp(patternToCompile, {
         global: true,
         hasIndices: true,
         rules: {
