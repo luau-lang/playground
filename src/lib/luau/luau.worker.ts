@@ -75,8 +75,25 @@ async function loadModule(): Promise<LuauWasmModule> {
   return modulePromise;
 }
 
+/**
+ * Register a file with both its original name and without extension.
+ * This allows require("foo") to work for "foo.luau".
+ */
+function registerFile(
+  module: LuauWasmModule,
+  name: string,
+  content: string,
+  fn: 'luau_add_module' | 'luau_set_source'
+): void {
+  module.ccall(fn, null, ['string', 'string'], [name, content]);
+  const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
+  if (nameWithoutExt !== name) {
+    module.ccall(fn, null, ['string', 'string'], [nameWithoutExt, content]);
+  }
+}
+
 // Helper to send response with requestId
-function respond(response: WorkerResponse, requestId?: string) {
+function respond(response: WorkerResponse, requestId?: string): void {
   self.postMessage(requestId ? { ...response, requestId } : response);
 }
 
@@ -194,23 +211,10 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
       case 'registerModules': {
         const module = await loadModule();
         // Clear existing modules first
-        try {
-          module.ccall('luau_clear_modules', null, [], []);
-        } catch {
-          // Ignore
-        }
+        module.ccall('luau_clear_modules', null, [], []);
         // Register each module
         for (const [name, content] of Object.entries(request.modules)) {
-          try {
-            module.ccall('luau_add_module', null, ['string', 'string'], [name, content]);
-            // Also register without extension
-            const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
-            if (nameWithoutExt !== name) {
-              module.ccall('luau_add_module', null, ['string', 'string'], [nameWithoutExt, content]);
-            }
-          } catch {
-            // Ignore individual errors
-          }
+          registerFile(module, name, content, 'luau_add_module');
         }
         respond({ type: 'registerModules', success: true }, requestId);
         break;
@@ -219,15 +223,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId?: string }>)
       case 'registerSources': {
         const module = await loadModule();
         for (const [name, content] of Object.entries(request.sources)) {
-          try {
-            module.ccall('luau_set_source', null, ['string', 'string'], [name, content]);
-            const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
-            if (nameWithoutExt !== name) {
-              module.ccall('luau_set_source', null, ['string', 'string'], [nameWithoutExt, content]);
-            }
-          } catch {
-            // Ignore
-          }
+          registerFile(module, name, content, 'luau_set_source');
         }
         respond({ type: 'registerSources', success: true }, requestId);
         break;

@@ -17,7 +17,7 @@
   let shareSuccess = $state<boolean | null>(null);
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   
-  // Delayed running state to avoid flash on fast scripts
+  // Delay before showing stop button to avoid flash on fast scripts
   let showStopButton = $state(false);
   
   $effect(() => {
