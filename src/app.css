@@ -1,6 +1,23 @@
 @import "tailwindcss";
 
-/* Builder Sans font family - browser synthesizes other weights */
+/*
+ * Font files are subset to reduce size (~35KB → ~16KB each).
+ * Full versions are kept as *-full.woff2 backups.
+ *
+ * To regenerate subsets:
+ *   cd public/font
+ *   pyftsubset BuilderSans-Regular-full.woff2 \
+ *     --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2190-21FF,U+2212,U+2215,U+FEFF,U+FFFD" \
+ *     --flavor=woff2 --output-file=BuilderSans-Regular.woff2
+ *   pyftsubset BuilderMono-Regular-full.woff2 \
+ *     --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2190-21FF,U+2212,U+2215,U+FEFF,U+FFFD" \
+ *     --flavor=woff2 --output-file=BuilderMono-Regular.woff2
+ *
+ * Includes: Basic Latin, Latin-1 Supplement, General Punctuation, Arrows, common symbols.
+ * Browser synthesizes bold weights via font-synthesis: weight.
+ */
+
+/* Builder Sans font family */
 @font-face {
   font-family: "Builder Sans";
   font-style: normal;
@@ -9,7 +26,7 @@
   src: url("/font/BuilderSans-Regular.woff2") format("woff2");
 }
 
-/* Builder Mono font family - browser synthesizes other weights */
+/* Builder Mono font family */
 @font-face {
   font-family: "Builder Mono";
   font-style: normal;
