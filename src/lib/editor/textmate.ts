@@ -118,9 +118,9 @@ function scopeToToken(scopes: string[]): string | null {
     if (scope.startsWith('support.type')) return 'typeName';
     
     // Functions
-    if (scope.startsWith('entity.name.function')) return 'function';
-    if (scope.startsWith('support.function')) return 'function';
-    if (scope.includes('function-call')) return 'function';
+    if (scope.startsWith('entity.name.function')) return 'variableName.function';
+    if (scope.startsWith('support.function')) return 'variableName.function';
+    if (scope.includes('function-call')) return 'variableName.function';
     
     // Variables
     if (scope.startsWith('variable.parameter')) return 'variableName.definition';
