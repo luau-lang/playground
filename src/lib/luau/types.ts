@@ -70,7 +70,6 @@ export interface LuauWasmModule {
   // Configuration
   ccall(name: 'luau_set_mode', returnType: null, argTypes: ['number'], args: [number]): void;
   ccall(name: 'luau_set_solver', returnType: null, argTypes: ['boolean'], args: [boolean]): void;
-  ccall(name: 'luau_get_config', returnType: 'string', argTypes: [], args: []): string;
   
   // Bytecode
   ccall(name: 'luau_dump_bytecode', returnType: 'string', argTypes: ['string', 'number', 'number', 'number', 'number'], args: [string, number, number, number, number]): string;
