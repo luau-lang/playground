@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <cmath>
 
 // Luau headers
 #include "Luau/Ast.h"
@@ -204,7 +205,12 @@ static void serializeValueToJson(lua_State* L, int idx, std::string& out, std::v
         case LUA_TNUMBER: {
             double num = lua_tonumber(L, idx);
             out += "{\"type\":\"number\",\"value\":";
-            if (num == static_cast<double>(static_cast<long long>(num))) {
+            // Handle special float values that aren't valid JSON
+            if (std::isnan(num)) {
+                out += "\"nan\"";
+            } else if (std::isinf(num)) {
+                out += num > 0 ? "\"inf\"" : "\"-inf\"";
+            } else if (num == static_cast<double>(static_cast<long long>(num))) {
                 out += std::to_string(static_cast<long long>(num));
             } else {
                 char buf[64];
