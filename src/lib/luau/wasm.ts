@@ -19,7 +19,13 @@ import LuauWorker from './luau.worker?worker';
 
 declare const __wasmPromises: { luau: Promise<ArrayBuffer> } | undefined;
 
+// Error messages for termination
 const STOPPED_ERROR = 'Execution stopped';
+const CANCELLED_ERROR = 'Cancelled';
+
+// Convert LuauMode to numeric value for WASM
+const modeToNum = (mode: LuauMode): number =>
+  mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
 
 // Cached WASM binary - stored as Uint8Array so it can be cloned for transfers
 let cachedWasmBinary: Uint8Array | null = null;
@@ -94,7 +100,8 @@ function setupWorkerHandlers(manager: WorkerManager, name: string): void {
   
   manager.worker.onerror = (e) => {
     console.error(`[Luau ${name}] Worker error:`, e);
-    rejectAllPending(manager, new Error('Worker error'));
+    // Reset state so future requests trigger a new worker
+    terminateWorker(manager, 'Worker error');
   };
 }
 
@@ -161,48 +168,78 @@ function terminateWorker(manager: WorkerManager, errorMessage: string = STOPPED_
 }
 
 // ============================================================================
+// Shared Worker Loading
+// ============================================================================
+
+async function loadWorker(
+  manager: WorkerManager,
+  name: string,
+  options?: { 
+    checkTerminated?: boolean;
+    postInit?: () => Promise<void>;
+  }
+): Promise<void> {
+  if (manager.ready && manager.worker) {
+    return;
+  }
+
+  if (manager.readyPromise) {
+    return manager.readyPromise;
+  }
+
+  const { checkTerminated = false, postInit } = options ?? {};
+
+  manager.readyPromise = (async () => {
+    try {
+      const binaryPromise = getWasmBinary();
+      manager.worker = new LuauWorker();
+      setupWorkerHandlers(manager, name);
+      
+      const wasmBinary = await binaryPromise;
+      
+      if (checkTerminated && !manager.worker) {
+        throw new Error(STOPPED_ERROR);
+      }
+      
+      await initializeWorker(manager, wasmBinary);
+      
+      if (checkTerminated && !manager.worker) {
+        throw new Error(STOPPED_ERROR);
+      }
+      
+      manager.ready = true;
+      console.log(`[Luau ${name}] Worker ready`);
+      
+      await postInit?.();
+    } catch (error) {
+      manager.readyPromise = null;
+      manager.ready = false;
+      
+      if (error instanceof Error && error.message === STOPPED_ERROR) {
+        throw error;
+      }
+      throw new Error(`Failed to load ${name.toLowerCase()} worker`, { cause: error });
+    }
+  })();
+
+  return manager.readyPromise;
+}
+
+// ============================================================================
 // Analysis Worker - Long-lived for LSP, bytecode, type checking
 // ============================================================================
 
 const analysis = createWorkerManager();
 
 async function loadAnalysisWorker(): Promise<void> {
-  if (analysis.ready && analysis.worker) {
-    return;
-  }
-
-  if (analysis.readyPromise) {
-    return analysis.readyPromise;
-  }
-
-  analysis.readyPromise = (async () => {
-    try {
-      const binaryPromise = getWasmBinary();
-      analysis.worker = new LuauWorker();
-      setupWorkerHandlers(analysis, 'Analysis');
-      
-      const wasmBinary = await binaryPromise;
-      await initializeWorker(analysis, wasmBinary);
-      
-      analysis.ready = true;
-      console.log('[Luau Analysis] Worker ready');
-      
-      // Sync settings
+  return loadWorker(analysis, 'Analysis', {
+    postInit: async () => {
       const currentSettings = get(settings);
-      const modeNum = currentSettings.mode === 'strict' ? 1 : currentSettings.mode === 'nocheck' ? 2 : 0;
-      await sendToWorker(analysis, 'setMode', { mode: modeNum });
+      await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });
       await sendToWorker(analysis, 'setSolver', { isNew: currentSettings.solver === 'new' });
-      
-      // Start listening to settings changes
       initSettingsSync();
-    } catch (error) {
-      analysis.readyPromise = null;
-      analysis.ready = false;
-      throw new Error('Failed to load analysis worker', { cause: error });
     }
-  })();
-
-  return analysis.readyPromise;
+  });
 }
 
 async function sendAnalysisRequest<K extends WorkerRequest['type']>(
@@ -220,51 +257,13 @@ async function sendAnalysisRequest<K extends WorkerRequest['type']>(
 const execution = createWorkerManager();
 
 async function loadExecutionWorker(): Promise<void> {
-  if (execution.ready && execution.worker) {
-    return;
-  }
-
-  if (execution.readyPromise) {
-    return execution.readyPromise;
-  }
-
-  execution.readyPromise = (async () => {
-    try {
-      const binaryPromise = getWasmBinary();
-      execution.worker = new LuauWorker();
-      setupWorkerHandlers(execution, 'Execution');
-      
-      const wasmBinary = await binaryPromise;
-      
-      if (!execution.worker) {
-        throw new Error(STOPPED_ERROR);
-      }
-      
-      await initializeWorker(execution, wasmBinary);
-      
-      if (!execution.worker) {
-        throw new Error(STOPPED_ERROR);
-      }
-      
-      execution.ready = true;
-      console.log('[Luau Execution] Worker ready');
-      
-      // Sync settings (mode affects runtime behavior for some edge cases)
+  return loadWorker(execution, 'Execution', {
+    checkTerminated: true,
+    postInit: async () => {
       const currentSettings = get(settings);
-      const modeNum = currentSettings.mode === 'strict' ? 1 : currentSettings.mode === 'nocheck' ? 2 : 0;
-      await sendToWorker(execution, 'setMode', { mode: modeNum });
-    } catch (error) {
-      execution.readyPromise = null;
-      execution.ready = false;
-      
-      if (error instanceof Error && error.message === STOPPED_ERROR) {
-        throw error;
-      }
-      throw new Error('Failed to load execution worker', { cause: error });
+      await sendToWorker(execution, 'setMode', { mode: modeToNum(currentSettings.mode) });
     }
-  })();
-
-  return execution.readyPromise;
+  });
 }
 
 async function sendExecutionRequest<K extends WorkerRequest['type']>(
@@ -427,12 +426,11 @@ export async function setSource(name: string, source: string): Promise<void> {
  * Set the type checking mode on the analysis worker.
  */
 export async function setLuauMode(mode: LuauMode): Promise<void> {
-  const modeNum = mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
   try {
-    await sendAnalysisRequest('setMode', { mode: modeNum });
+    await sendAnalysisRequest('setMode', { mode: modeToNum(mode) });
     // Also update execution worker if it's running
     if (execution.ready) {
-      await sendToWorker(execution, 'setMode', { mode: modeNum });
+      await sendToWorker(execution, 'setMode', { mode: modeToNum(mode) });
     }
   } catch (error) {
     console.error('[Luau] Failed to set mode:', error);
@@ -479,9 +477,6 @@ export function initSettingsSync(): void {
 
 // Run ID to track and cancel specific runs
 let currentRunId = 0;
-
-// Used for silent termination when switching actions (not user-initiated stop)
-const CANCELLED_ERROR = 'Cancelled';
 
 /**
  * Run the active file and display output.
@@ -552,11 +547,6 @@ export async function runCode(): Promise<void> {
  */
 export async function checkCode(): Promise<void> {
   const myRunId = ++currentRunId;
-  
-  // Stop any running execution silently since user wants to check instead
-  if (execution.worker) {
-    terminateWorker(execution, CANCELLED_ERROR);
-  }
   
   setRunning(true);
   clearOutput();
