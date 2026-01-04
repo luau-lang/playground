@@ -61,6 +61,7 @@ for (const pattern of patterns) {
         recursionLimit: 5,
         singleline: true,
       },
+      target: 'ES2024',
     });
     
     // Store as [source, flags] tuple
