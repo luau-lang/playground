@@ -27,18 +27,20 @@ const CANCELLED_ERROR = 'Cancelled';
 const modeToNum = (mode: LuauMode): number =>
   mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
 
-// Cached WASM binary - stored as Uint8Array so it can be cloned for transfers
-let cachedWasmBinary: Uint8Array | null = null;
-let wasmBinaryLoading: Promise<Uint8Array> | null = null;
+// Compiled WASM module - shared with workers to avoid recompilation
+// WebAssembly.Module is structured-clonable, so workers get the same compiled code
+let compiledWasmModule: WebAssembly.Module | null = null;
+let wasmModuleLoading: Promise<WebAssembly.Module> | null = null;
 
 /**
- * Get the WASM binary, using preloaded promise from index.html or fetching once.
- * Returns a fresh clone each time to support Transferable usage.
+ * Get the compiled WASM module, using preloaded promise from index.html or fetching once.
+ * WebAssembly.Module is structured-clonable and can be sent to workers without copying
+ * the entire compiled code - workers can instantiate directly from the shared module.
  */
-async function getWasmBinary(): Promise<ArrayBuffer> {
-  if (!cachedWasmBinary) {
-    if (!wasmBinaryLoading) {
-      wasmBinaryLoading = (async () => {
+async function getCompiledWasmModule(): Promise<WebAssembly.Module> {
+  if (!compiledWasmModule) {
+    if (!wasmModuleLoading) {
+      wasmModuleLoading = (async () => {
         let buffer: ArrayBuffer;
         if (typeof __wasmPromises !== 'undefined') {
           buffer = await __wasmPromises.luau;
@@ -46,14 +48,14 @@ async function getWasmBinary(): Promise<ArrayBuffer> {
           const baseUrl = new URL('./', document.baseURI).href.replace(/\/$/, '');
           buffer = await fetch(`${baseUrl}/wasm/luau.wasm`).then(r => r.arrayBuffer());
         }
-        cachedWasmBinary = new Uint8Array(buffer);
-        return cachedWasmBinary;
+        // Compile once - the compiled module can be shared with workers
+        compiledWasmModule = await WebAssembly.compile(buffer);
+        return compiledWasmModule;
       })();
     }
-    await wasmBinaryLoading;
+    await wasmModuleLoading;
   }
-  // Return a clone so the original survives Transferable
-  return cachedWasmBinary!.slice().buffer;
+  return compiledWasmModule!;
 }
 
 // ============================================================================
@@ -112,7 +114,7 @@ function rejectAllPending(manager: WorkerManager, error: Error): void {
   manager.pendingRequests.clear();
 }
 
-async function initializeWorker(manager: WorkerManager, wasmBinary: ArrayBuffer): Promise<void> {
+async function initializeWorker(manager: WorkerManager, wasmModule: WebAssembly.Module): Promise<void> {
   const requestId = `init_${manager.requestIdCounter++}`;
   
   return new Promise((resolve, reject) => {
@@ -133,8 +135,7 @@ async function initializeWorker(manager: WorkerManager, wasmBinary: ArrayBuffer)
     });
     
     manager.worker!.postMessage(
-      { type: 'init', wasmBinary, requestId } satisfies WorkerRequest & { requestId: string },
-      [wasmBinary]
+      { type: 'init', wasmModule, requestId } satisfies WorkerRequest & { requestId: string }
     );
   });
 }
@@ -199,24 +200,23 @@ async function loadWorker(
 
   manager.readyPromise = (async () => {
     try {
-      const binaryPromise = getWasmBinary();
+      const modulePromise = getCompiledWasmModule();
       manager.worker = new LuauWorker();
       setupWorkerHandlers(manager, name);
       
-      const wasmBinary = await binaryPromise;
+      const wasmModule = await modulePromise;
       
       if (checkTerminated && !manager.worker) {
         throw new Error(STOPPED_ERROR);
       }
       
-      await initializeWorker(manager, wasmBinary);
+      await initializeWorker(manager, wasmModule);
       
       if (checkTerminated && !manager.worker) {
         throw new Error(STOPPED_ERROR);
       }
       
       manager.ready = true;
-      console.log(`[Luau ${name}] Worker ready`);
       
       await postInit?.();
     } catch (error) {
@@ -308,7 +308,6 @@ export function stopExecution(): void {
     return; // Nothing to stop
   }
   
-  console.log('[Luau Execution] Stopping...');
   terminateWorker(execution);
   setRunning(false);
   appendOutput({ type: 'warn', text: STOPPED_ERROR });
@@ -497,6 +496,11 @@ export async function runCode(): Promise<void> {
   } finally {
     if (currentRunId === myRunId) {
       setRunning(false);
+      // Terminate execution worker to free memory when not running
+      // Worker startup is fast enough (~20-50ms) to recreate on demand
+      if (execution.worker) {
+        terminateWorker(execution, 'Execution complete');
+      }
     }
   }
 }

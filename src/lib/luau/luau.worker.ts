@@ -18,10 +18,12 @@ import createLuauModuleFactory from './luau-module.js';
 // The WASM module singleton within this worker
 let wasmModule: LuauWasmModule | null = null;
 let modulePromise: Promise<LuauWasmModule> | null = null;
+// Pre-compiled WebAssembly.Module from main thread
+let compiledWasmModule: WebAssembly.Module | null = null;
 
 // Message types for worker communication
 export type WorkerRequest = 
-  | { type: 'init'; wasmBinary: ArrayBuffer }
+  | { type: 'init'; wasmModule: WebAssembly.Module }
   | { type: 'execute'; code: string }
   | { type: 'getDiagnostics'; code: string }
   | { type: 'autocomplete'; code: string; line: number; col: number }
@@ -47,24 +49,29 @@ export type WorkerResponse =
   | { type: 'registerSources'; success: boolean }
   | { type: 'error'; error: string };
 
-let cachedWasmBinary: Uint8Array | null = null;
-
 async function loadModule(): Promise<LuauWasmModule> {
   if (wasmModule) return wasmModule;
   if (modulePromise) return modulePromise;
 
-  if (!cachedWasmBinary) {
-    throw new Error('WASM binary not initialized - call init first');
+  if (!compiledWasmModule) {
+    throw new Error('WASM module not initialized - call init first');
   }
 
   modulePromise = (async () => {
+    // Use instantiateWasm to leverage the pre-compiled WebAssembly.Module
+    // This avoids recompiling the WASM in each worker
     const module = await (createLuauModuleFactory as CreateLuauModule)({
-      wasmBinary: cachedWasmBinary!,
+      instantiateWasm: (imports, successCallback) => {
+        WebAssembly.instantiate(compiledWasmModule!, imports)
+          .then((instance) => {
+            successCallback(instance);
+          });
+        // Return empty object - Emscripten expects this for async instantiation
+        return {};
+      },
     });
 
     wasmModule = module;
-    // Free the buffer now that module is loaded - it's held internally by WASM
-    cachedWasmBinary = null;
     return module;
   })();
 
@@ -109,8 +116,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
   try {
     switch (request.type) {
       case 'init': {
-        // Convert transferred ArrayBuffer to Uint8Array for Emscripten
-        cachedWasmBinary = new Uint8Array(request.wasmBinary);
+        // Store the pre-compiled WebAssembly.Module from main thread
+        compiledWasmModule = request.wasmModule;
         await loadModule();
         respond(requestId, { type: 'ready' });
         break;

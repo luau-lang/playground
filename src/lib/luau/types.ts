@@ -85,10 +85,11 @@ export interface LuauWasmModule {
 }
 
 export type CreateLuauModule = (options?: {
-  locateFile?: (path: string, prefix: string) => string;
-  wasmBinary?: Uint8Array;
-  print?: (text: string) => void;
-  printErr?: (text: string) => void;
+  /** Use pre-compiled WebAssembly.Module for instantiation (avoids recompilation) */
+  instantiateWasm?: (
+    imports: WebAssembly.Imports,
+    successCallback: (instance: WebAssembly.Instance) => void
+  ) => WebAssembly.Exports | Record<string, never>;
 }) => Promise<LuauWasmModule>;
 
 declare global {
