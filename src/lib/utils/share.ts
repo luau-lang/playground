@@ -78,7 +78,7 @@ export function generatePlaygroundUrl(): URL {
     showBytecode: get(showBytecode),
   };
   
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.origin + window.location.pathname);
   const encoded = encodeState(state);
   url.hash = encoded;
   return url;
