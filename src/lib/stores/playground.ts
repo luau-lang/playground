@@ -1,6 +1,7 @@
 import { writable, get } from 'svelte/store';
 import LZString from 'lz-string';
 import type { OutputLine } from '$lib/utils/output';
+import { decodeState } from '$lib/utils/share';
 
 // Re-export for backwards compatibility
 export type { OutputLine };
@@ -33,33 +34,33 @@ print("Sum:", sum)
 
 // Load initial state from URL if available
 function getInitialState(): { files: Record<string, string>; activeFile: string } {
+  const fallback = { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+
   if (typeof window === 'undefined') {
-    return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+    return fallback;
   }
-  
+
   const hash = window.location.hash;
   if (!hash.startsWith('#code=')) {
-    return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+    return fallback;
   }
-  
+
   try {
     const encoded = hash.slice(6); // Remove '#code='
-    const json = LZString.decompressFromEncodedURIComponent(encoded);
-    if (!json) {
-      return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+    const state = decodeState(encoded);
+    if (!state) {
+      return fallback;
     }
-    
-    const state = JSON.parse(json) as { files: Record<string, string>; active: string };
-    
+
     // Validate
     if (!state.files || typeof state.files !== 'object' || Object.keys(state.files).length === 0) {
-      return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+      return fallback;
     }
-    
-    const active = state.active in state.files ? state.active : Object.keys(state.files)[0];
+
+    const active = state.active && state.active in state.files ? state.active : Object.keys(state.files)[0];
     return { files: state.files, activeFile: active };
   } catch {
-    return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+    return fallback;
   }
 }
 
@@ -88,7 +89,7 @@ export function removeFile(name: string) {
     const { [name]: _, ...rest } = f;
     return rest;
   });
-  
+
   // Switch to another file if we removed the active one
   const currentActive = get(activeFile);
   if (currentActive === name) {
@@ -105,13 +106,13 @@ export function updateFile(name: string, content: string) {
 
 export function renameFile(oldName: string, newName: string) {
   if (oldName === newName) return;
-  
+
   files.update((f) => {
     const content = f[oldName];
     const { [oldName]: _, ...rest } = f;
     return { ...rest, [newName]: content };
   });
-  
+
   // Update active file if we renamed it
   const currentActive = get(activeFile);
   if (currentActive === oldName) {
@@ -145,4 +146,3 @@ export function getActiveFileContent(): string {
   const active = get(activeFile);
   return f[active] || '';
 }
-

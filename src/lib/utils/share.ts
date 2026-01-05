@@ -1,6 +1,6 @@
 /**
  * Share Functionality
- * 
+ *
  * Encodes playground state into URL-safe compressed format using lz-string.
  */
 
@@ -11,7 +11,7 @@ import LZString from 'lz-string';
 
 export interface ShareState {
   files: Record<string, string>;
-  active: string;
+  active: string; // Active file name
   v: number; // Version for future compatibility
   settings?: PlaygroundSettings;
   showBytecode?: boolean;
@@ -30,18 +30,22 @@ export function encodeState(state: ShareState): string {
 
 /**
  * Decode a URL-safe string back to state.
+ *
+ * Note: This function does not validate any ShareState properties. It simply parses and
+ * returns whatever is present as a Partial<ShareState>.
  */
-export function decodeState(encoded: string): ShareState | null {
+export function decodeState(encoded: string): Partial<ShareState> | null {
   try {
     const json = LZString.decompressFromEncodedURIComponent(encoded);
     if (!json) return null;
-    
-    const state = JSON.parse(json) as ShareState;
-    
-    // Validate the state
-    if (!state.files || typeof state.files !== 'object') return null;
-    if (!state.active || typeof state.active !== 'string') return null;
-    
+
+    let state: Partial<ShareState>;
+    try {
+      state = JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+
     return state;
   } catch {
     return null;
@@ -62,7 +66,7 @@ export function generatePlaygroundUrl(
     active: activeFileName,
     v: CURRENT_VERSION,
   };
-  
+
   const encoded = encodeState(state);
   return `${baseUrl}/#code=${encoded}`;
 }
@@ -70,10 +74,7 @@ export function generatePlaygroundUrl(
 /**
  * Open the code in the playground in a new tab.
  */
-export function openInPlayground(
-  filesData: Record<string, string>,
-  activeFileName: string
-): void {
+export function openInPlayground(filesData: Record<string, string>, activeFileName: string): void {
   const url = generatePlaygroundUrl(filesData, activeFileName);
   window.open(url, '_blank', 'noopener,noreferrer');
 }
