@@ -7,7 +7,7 @@
 import { files, activeFile } from '$lib/stores/playground';
 import { settings, showBytecode, type PlaygroundSettings } from '$lib/stores/settings';
 import { get } from 'svelte/store';
-import LZString from 'lz-string';
+import { encodeState } from './state';
 
 export interface ShareState {
   files: Record<string, string>;
@@ -19,38 +19,6 @@ export interface ShareState {
 
 const CURRENT_VERSION = 1;
 const PLAYGROUND_URL = 'https://play.luau.org';
-
-/**
- * Encode state to a URL-safe string.
- */
-export function encodeState(state: ShareState): string {
-  const json = JSON.stringify(state);
-  return LZString.compressToEncodedURIComponent(json);
-}
-
-/**
- * Decode a URL-safe string back to state.
- *
- * Note: This function does not validate any ShareState properties. It simply parses and
- * returns whatever is present as a Partial<ShareState>.
- */
-export function decodeState(encoded: string): Partial<ShareState> | null {
-  try {
-    const json = LZString.decompressFromEncodedURIComponent(encoded);
-    if (!json) return null;
-
-    let state: Partial<ShareState>;
-    try {
-      state = JSON.parse(json);
-    } catch (e) {
-      return null;
-    }
-
-    return state;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Generate a playground URL with encoded state.

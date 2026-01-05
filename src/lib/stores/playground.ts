@@ -1,7 +1,6 @@
 import { writable, get } from 'svelte/store';
-import LZString from 'lz-string';
+import { decodeState } from '$lib/utils/state';
 import type { OutputLine } from '$lib/utils/output';
-import { decodeState } from '$lib/utils/share';
 
 // Re-export for backwards compatibility
 export type { OutputLine };

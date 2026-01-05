@@ -1,6 +1,5 @@
 import { writable, get } from 'svelte/store';
-import LZString from 'lz-string';
-import { decodeState } from '$lib/utils/share';
+import { decodeState } from '$lib/utils/state';
 
 export type LuauMode = 'strict' | 'nonstrict' | 'nocheck';
 export type SolverMode = 'new' | 'old';
