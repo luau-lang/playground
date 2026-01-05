@@ -54,7 +54,7 @@
       <div class="flex gap-5">
         <div class="flex flex-col items-end opacity-50 select-none">
           {#each defaultCodeLines as _, i}
-            <span class="leading-[1.4] pl-[5px] pr-[3px] min-w-5 text-right">{i + 1}</span>
+            <span class="leading-[1.4] pl-1.25 pr-0.75 min-w-5 text-right">{i + 1}</span>
           {/each}
         </div>
         <div class="flex-1 flex flex-col gap-1 pt-0.5">

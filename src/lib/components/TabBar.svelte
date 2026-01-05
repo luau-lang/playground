@@ -122,7 +122,7 @@
   }
 </script>
 
-<header class="relative flex items-end gap-1 px-2 pt-1.5 pb-0 bg-(--bg-secondary) min-h-[44px]">
+<header class="relative flex items-end gap-1 px-2 pt-1.5 pb-0 bg-(--bg-secondary) min-h-11">
   <!-- Bottom border line -->
   <div class="absolute bottom-0 left-0 right-0 h-px bg-(--border-color)"></div>
   
@@ -161,7 +161,7 @@
             onclick={(e) => e.stopPropagation()}
           />
         {:else}
-          <span class="truncate max-w-[80px] sm:max-w-[120px]">{fileName}</span>
+          <span class="truncate max-w-20 sm:max-w-30">{fileName}</span>
         {/if}
         {#if Object.keys($files).length > 1 && !$isEmbed && editingFileName !== fileName}
           <button
