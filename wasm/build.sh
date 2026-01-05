@@ -53,7 +53,8 @@ fi
 
 # Copy JS module to src for bundling (with Vite ignore comment to suppress URL warning)
 SRC_OUTPUT="$SCRIPT_DIR/../src/lib/luau/luau-module.js"
-sed 's/(new URL("luau.wasm",import.meta.url))/(new URL(\/* @vite-ignore *\/ "luau.wasm",import.meta.url))/g' luau.js > "$SRC_OUTPUT"
+echo "// @ts-nocheck" > "$SRC_OUTPUT"
+sed 's/(new URL("luau.wasm",import.meta.url))/(new URL(\/* @vite-ignore *\/ "luau.wasm",import.meta.url))/g' luau.js >> "$SRC_OUTPUT"
 
 echo ""
 echo "Build complete!"
