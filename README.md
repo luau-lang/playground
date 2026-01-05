@@ -75,13 +75,28 @@ The built WASM file will be copied to `public/wasm/`.
 Share playground state via URL hash:
 
 ```
-https://play.luau.org/#code=<compressed-state>
+https://play.luau.org/#<compressed-state>
 ```
 
-The state is LZ-String compressed JSON containing:
+The state is LZ-String compressed and versioned JSON:
+
+v2:
+- `c`: Optional single file code contents, mutually exclusive with `f`
+- `f`: Optional object mapping filenames to content, mutually exclusive with `c`
+- `a`: Currently active filename, optional if only one file exists
+- `v: 2`: Version number for compatibility
+- `s`: Optional and partial (all properties are optional) compiler/type-checking settings
+  - `mode`: `"strict"` | `"nonstrict"` | `"nocheck"`
+  - `solver`: `"new"` | `"old"`
+  - `optimizationLevel`: `0` | `1` | `2`
+  - `debugLevel`: `0` | `1` | `2`
+  - `compilerRemarks`: `boolean`
+- `b`: Optional boolean to show bytecode panel, default false
+
+v1:
 - `files`: Object mapping filenames to content
 - `active`: Currently active filename
-- `v`: Version number for compatibility
+- `v: 1`: Version number for compatibility
 - `settings`: Optional compiler/type-checking settings
   - `mode`: `"strict"` | `"nonstrict"` | `"nocheck"`
   - `solver`: `"new"` | `"old"`
@@ -95,7 +110,7 @@ The state is LZ-String compressed JSON containing:
 Embed the playground in an iframe with a minimal UI:
 
 ```
-https://play.luau.org/?embed=true#code=<compressed-state>
+https://play.luau.org/?embed=true#<compressed-state>
 ```
 
 Query parameters:
