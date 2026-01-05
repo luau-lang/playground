@@ -75,19 +75,19 @@ function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings
 function loadSettings(): { settings: PlaygroundSettings; showBytecode: boolean } {
   // First try to load from URL (takes priority for shared links)
   const urlState = loadSettingsFromUrl();
-  
-  if (urlState.settings) {
-    // URL settings found - use them (with defaults for any missing fields)
-    return {
-      settings: mergeSettings(urlState.settings),
-      showBytecode: urlState.showBytecode ?? false,
-    };
-  }
-  
-  // Fall back to localStorage
+
+  const settingsFromUrl = urlState.settings;
+  const showFromUrl = urlState.showBytecode;
+
+  const settings = settingsFromUrl
+    ? mergeSettings(settingsFromUrl)
+    : loadSettingsFromStorage();
+
+  const showBytecode = showFromUrl ?? false;
+
   return {
-    settings: loadSettingsFromStorage(),
-    showBytecode: false,
+    settings,
+    showBytecode,
   };
 }
 
