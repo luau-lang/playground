@@ -6,7 +6,6 @@
   import { showBytecode } from '$lib/stores/settings';
   import { isEmbed, embedTheme } from '$lib/stores/embed';
   import { initTheme, setTheme } from '$lib/utils/theme';
-  import { initShare } from '$lib/utils/share';
   import { loadLuauWasm } from '$lib/luau/wasm';
 
   let mounted = $state(false);
@@ -28,9 +27,7 @@
       } else {
         initTheme();
       }
-      
-      initShare();
-      
+            
       loadLuauWasm().catch(console.error);
     }
   });

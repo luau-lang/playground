@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { parseStateFromHash } from '$lib/utils/share';
+import { parseStateFromHash } from '$lib/utils/decode';
 
 export type LuauMode = 'strict' | 'nonstrict' | 'nocheck';
 export type SolverMode = 'new' | 'old';
@@ -20,7 +20,7 @@ export interface PlaygroundSettings {
 
 const STORAGE_KEY = 'luau-playground-settings';
 
-const defaultSettings: PlaygroundSettings = {
+export const defaultSettings: PlaygroundSettings = {
   mode: 'strict',
   solver: 'new',
   optimizationLevel: 1,

@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { parseStateFromHash } from '$lib/utils/share';
+import { parseStateFromHash } from '$lib/utils/decode';
 import type { OutputLine } from '$lib/utils/output';
 
 // Re-export for backwards compatibility
