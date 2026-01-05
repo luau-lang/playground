@@ -8,7 +8,7 @@ import { files, activeFile } from '$lib/stores/playground';
 import { settings, showBytecode, defaultSettings, type PlaygroundSettings } from '$lib/stores/settings';
 import { get } from 'svelte/store';
 import LZString from 'lz-string';
-import { type ShareState, type MinimalShareState, CURRENT_VERSION, PLAYGROUND_URL, DEFAULT_FILENAME } from '$lib/utils/decode';
+import { type ShareState, type MinimalShareState, CURRENT_VERSION, DEFAULT_FILENAME } from '$lib/utils/decode';
 
 /**
  * Check if settings differ from defaults.
@@ -68,38 +68,8 @@ export function encodeState(state: ShareState): string {
 
 /**
  * Generate a playground URL with encoded state.
- * This is a pure function that doesn't depend on stores.
  */
-export function generatePlaygroundUrl(
-  filesData: Record<string, string>,
-  activeFileName: string,
-  baseUrl: string = PLAYGROUND_URL
-): string {
-  const state: ShareState = {
-    files: filesData,
-    active: activeFileName,
-    v: CURRENT_VERSION,
-  };
-  
-  const encoded = encodeState(state);
-  return `${baseUrl}/#${encoded}`;
-}
-
-/**
- * Open the code in the playground in a new tab.
- */
-export function openInPlayground(
-  filesData: Record<string, string>,
-  activeFileName: string
-): void {
-  const url = generatePlaygroundUrl(filesData, activeFileName);
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-/**
- * Generate a share URL and copy it to the clipboard.
- */
-export async function sharePlayground(): Promise<boolean> {
+export function generatePlaygroundUrl(): URL {
   const state: ShareState = {
     files: get(files),
     active: get(activeFile),
@@ -107,10 +77,18 @@ export async function sharePlayground(): Promise<boolean> {
     settings: get(settings),
     showBytecode: get(showBytecode),
   };
-
-  const encoded = encodeState(state);
+  
   const url = new URL(window.location.href);
+  const encoded = encodeState(state);
   url.hash = encoded;
+  return url;
+}
+
+/**
+ * Generate a share URL and copy it to the clipboard.
+ */
+export async function sharePlayground(): Promise<boolean> {
+  const url = generatePlaygroundUrl();
 
   try {
     await navigator.clipboard.writeText(url.toString());

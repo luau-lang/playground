@@ -118,8 +118,7 @@
   }
 
   function handleOpenInPlayground() {
-    const url = generatePlaygroundUrl($files, $activeFile);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(generatePlaygroundUrl(), '_blank', 'noopener,noreferrer');
   }
 </script>
 

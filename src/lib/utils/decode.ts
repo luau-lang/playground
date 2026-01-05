@@ -23,13 +23,12 @@ export interface MinimalShareState {
 // v1: Original format with full keys (files, active, settings, showBytecode)
 // v2: Minimal format with short keys (c, f, a, s, b) omitting default values
 export const CURRENT_VERSION = 2;
-export const PLAYGROUND_URL = 'https://play.luau.org';
 export const DEFAULT_FILENAME = 'main.luau';
 
 /**
  * Convert minimal state (v2) back to full state.
  */
-function fromMinimalState(minimal: MinimalShareState): ShareState {
+function fromMinimalState(minimal: MinimalShareState): ShareState | null {
   let files: Record<string, string>;
   let active: string;
   
@@ -42,9 +41,8 @@ function fromMinimalState(minimal: MinimalShareState): ShareState {
     const fileNames = Object.keys(files);
     active = minimal.a ?? fileNames[0];
   } else {
-    // Invalid state
-    files = { [DEFAULT_FILENAME]: '' };
-    active = DEFAULT_FILENAME;
+    // Invalid state - no content provided
+    return null;
   }
   
   return {
@@ -60,7 +58,7 @@ function fromMinimalState(minimal: MinimalShareState): ShareState {
 /**
  * Decode a URL-safe string back to state.
  */
-export function decodeState(encoded: string): ShareState | null {
+function decodeState(encoded: string): ShareState | null {
   try {
     const json = LZString.decompressFromEncodedURIComponent(encoded);
     if (!json) return null;
