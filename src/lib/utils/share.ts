@@ -49,6 +49,26 @@ export function decodeState(encoded: string): ShareState | null {
 }
 
 /**
+ * Parse state from URL hash.
+ * Handles both new format (#encoded) and legacy format (#code=encoded).
+ */
+export function parseStateFromHash(hash: string): ShareState | null {
+  if (!hash || hash.length <= 1) return null;
+  
+  let encoded: string;
+  if (hash.startsWith('#code=')) {
+    // Legacy format: #code=encoded
+    encoded = hash.slice(6);
+  } else {
+    // New format: #encoded
+    encoded = hash.slice(1);
+  }
+  
+  if (!encoded) return null;
+  return decodeState(encoded);
+}
+
+/**
  * Generate a playground URL with encoded state.
  * This is a pure function that doesn't depend on stores.
  */
@@ -64,7 +84,7 @@ export function generatePlaygroundUrl(
   };
   
   const encoded = encodeState(state);
-  return `${baseUrl}/#code=${encoded}`;
+  return `${baseUrl}/#${encoded}`;
 }
 
 /**
@@ -92,7 +112,7 @@ export async function sharePlayground(): Promise<boolean> {
 
   const encoded = encodeState(state);
   const url = new URL(window.location.href);
-  url.hash = `code=${encoded}`;
+  url.hash = encoded;
 
   try {
     await navigator.clipboard.writeText(url.toString());

@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import LZString from 'lz-string';
+import { parseStateFromHash } from '$lib/utils/share';
 
 export type LuauMode = 'strict' | 'nonstrict' | 'nocheck';
 export type SolverMode = 'new' | 'old';
@@ -35,26 +35,15 @@ function loadSettingsFromUrl(): { settings: PlaygroundSettings | null; showBytec
     return { settings: null, showBytecode: null };
   }
   
-  const hash = window.location.hash;
-  if (!hash.startsWith('#code=')) {
+  const state = parseStateFromHash(window.location.hash);
+  if (!state) {
     return { settings: null, showBytecode: null };
   }
   
-  try {
-    const encoded = hash.slice(6); // Remove '#code='
-    const json = LZString.decompressFromEncodedURIComponent(encoded);
-    if (!json) {
-      return { settings: null, showBytecode: null };
-    }
-    
-    const state = JSON.parse(json) as { settings?: PlaygroundSettings; showBytecode?: boolean };
-    return {
-      settings: state.settings ?? null,
-      showBytecode: state.showBytecode ?? null,
-    };
-  } catch {
-    return { settings: null, showBytecode: null };
-  }
+  return {
+    settings: state.settings ?? null,
+    showBytecode: state.showBytecode ?? null,
+  };
 }
 
 function loadSettingsFromStorage(): PlaygroundSettings {

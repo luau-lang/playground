@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import LZString from 'lz-string';
+import { parseStateFromHash } from '$lib/utils/share';
 import type { OutputLine } from '$lib/utils/output';
 
 // Re-export for backwards compatibility
@@ -33,34 +33,19 @@ print("Sum:", sum)
 
 // Load initial state from URL if available
 function getInitialState(): { files: Record<string, string>; activeFile: string } {
+  const defaultState = { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+  
   if (typeof window === 'undefined') {
-    return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+    return defaultState;
   }
   
-  const hash = window.location.hash;
-  if (!hash.startsWith('#code=')) {
-    return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+  const state = parseStateFromHash(window.location.hash);
+  if (!state || Object.keys(state.files).length === 0) {
+    return defaultState;
   }
   
-  try {
-    const encoded = hash.slice(6); // Remove '#code='
-    const json = LZString.decompressFromEncodedURIComponent(encoded);
-    if (!json) {
-      return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
-    }
-    
-    const state = JSON.parse(json) as { files: Record<string, string>; active: string };
-    
-    // Validate
-    if (!state.files || typeof state.files !== 'object' || Object.keys(state.files).length === 0) {
-      return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
-    }
-    
-    const active = state.active in state.files ? state.active : Object.keys(state.files)[0];
-    return { files: state.files, activeFile: active };
-  } catch {
-    return { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
-  }
+  const active = state.active in state.files ? state.active : Object.keys(state.files)[0];
+  return { files: state.files, activeFile: active };
 }
 
 const initialState = getInitialState();
