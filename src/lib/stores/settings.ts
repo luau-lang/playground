@@ -1,8 +1,9 @@
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
+import { STORAGE_KEY, defaultSettings } from '$lib/constants';
 
-export type LuauMode = 'strict' | 'nonstrict' | 'nocheck';
-export type SolverMode = 'new' | 'old';
+export type LuauMode = "strict" | "nonstrict" | "nocheck";
+export type SolverMode = "new" | "old";
 export type OptimizationLevel = 0 | 1 | 2;
 export type DebugLevel = 0 | 1 | 2;
 export type OutputFormat = 0 | 1 | 2 | 3;
@@ -17,17 +18,6 @@ export interface PlaygroundSettings {
   outputFormat: OutputFormat;
   compilerRemarks: boolean;
 }
-
-const STORAGE_KEY = 'luau-playground-settings';
-
-export const defaultSettings: PlaygroundSettings = {
-  mode: 'strict',
-  solver: 'new',
-  optimizationLevel: 1,
-  debugLevel: 1,
-  outputFormat: 0,
-  compilerRemarks: false,
-};
 
 // Try to load settings from URL hash
 function loadSettingsFromUrl(): { settings: PlaygroundSettings | null; showBytecode: boolean | null } {

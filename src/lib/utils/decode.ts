@@ -1,4 +1,5 @@
-import { defaultSettings, type PlaygroundSettings } from '$lib/stores/settings';
+import { defaultSettings, DEFAULT_FILENAME } from '$lib/constants';
+import { type PlaygroundSettings } from '$lib/stores/settings';
 import LZString from 'lz-string';
 
 export interface ShareState {
@@ -22,8 +23,6 @@ export interface MinimalShareState {
 // Version history:
 // v1: Original format with full keys (files, active, settings, showBytecode)
 // v2: Minimal format with short keys (c, f, a, s, b) omitting default values
-export const CURRENT_VERSION = 2;
-export const DEFAULT_FILENAME = 'main.luau';
 
 /**
  * Convert minimal state (v2) back to full state.

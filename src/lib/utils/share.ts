@@ -5,10 +5,11 @@
  */
 
 import { files, activeFile } from '$lib/stores/playground';
-import { settings, showBytecode, defaultSettings, type PlaygroundSettings } from '$lib/stores/settings';
+import { settings, showBytecode, type PlaygroundSettings } from '$lib/stores/settings';
+import { defaultSettings, CURRENT_VERSION, DEFAULT_FILENAME } from '$lib/constants';
 import { get } from 'svelte/store';
 import LZString from 'lz-string';
-import { type ShareState, type MinimalShareState, CURRENT_VERSION, DEFAULT_FILENAME } from '$lib/utils/decode';
+import { type ShareState, type MinimalShareState } from '$lib/utils/decode';
 
 /**
  * Check if settings differ from defaults.
