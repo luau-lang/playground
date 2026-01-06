@@ -23,7 +23,7 @@ let compiledWasmModule: WebAssembly.Module | null = null;
 
 // Message types for worker communication
 export type WorkerRequest = 
-  | { type: 'init'; wasmModule: WebAssembly.Module }
+  | { type: 'init'; wasmModule?: WebAssembly.Module; wasmBytes?: ArrayBuffer }
   | { type: 'execute'; code: string }
   | { type: 'getDiagnostics'; code: string }
   | { type: 'autocomplete'; code: string; line: number; col: number }
@@ -117,7 +117,13 @@ function createMessageHandler(postMessage: (message: WorkerResponse & { requestI
         case 'init': {
           // Store the pre-compiled WebAssembly.Module from main thread
           if (!compiledWasmModule) {
-            compiledWasmModule = request.wasmModule;
+            if (request.wasmModule) {
+              compiledWasmModule = request.wasmModule;
+            } else if (request.wasmBytes) {
+              compiledWasmModule = await WebAssembly.compile(request.wasmBytes);
+            } else {
+              throw new Error('WASM module not provided');
+            }
           }
           await loadModule();
           respond(requestId, { type: 'ready' });
@@ -249,7 +255,10 @@ function attachMessagePort(port: MessagePort): void {
   port.start();
 }
 
-if ('onconnect' in self) {
+const isSharedWorkerScope =
+  typeof SharedWorkerGlobalScope !== 'undefined' && self instanceof SharedWorkerGlobalScope;
+
+if (isSharedWorkerScope) {
   (self as SharedWorkerGlobalScope).onconnect = (event) => {
     for (const port of event.ports) {
       attachMessagePort(port);
