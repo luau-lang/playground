@@ -16,7 +16,9 @@ export type LuauValue =
   | { type: 'function' }
   | { type: 'userdata' }
   | { type: 'thread' }
-  | { type: 'circular' };
+  | { type: 'circular' }
+  | { type: 'vector'; value: (number | SpecialFloat)[] }
+  | { type: 'buffer'; size: number };
 
 export interface OutputLine {
   type: 'log' | 'error' | 'warn';

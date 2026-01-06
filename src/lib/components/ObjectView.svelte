@@ -52,6 +52,13 @@
       : `${count} field${count !== 1 ? "s" : ""}`;
   }
 
+  function formatVectorComponent(v: number | string): string {
+    if (typeof v === "string") return v; // inf, -inf, nan
+    // Show clean integers, otherwise limit decimals
+    if (Number.isInteger(v)) return String(v);
+    return v.toFixed(4).replace(/\.?0+$/, "");
+  }
+
   function getPrimitiveText(): string {
     switch (value.type) {
       case "nil":
@@ -76,6 +83,10 @@
         return "<thread>";
       case "circular":
         return "<circular>";
+      case "vector":
+        return `vector(${value.value.map(formatVectorComponent).join(", ")})`;
+      case "buffer":
+        return `<buffer: ${value.size} bytes>`;
       default:
         return "?";
     }
@@ -94,7 +105,10 @@
       case "function":
       case "userdata":
       case "thread":
+      case "buffer":
         return "ov-special";
+      case "vector":
+        return "ov-vector";
       case "circular":
         return "ov-error";
       default:
@@ -139,6 +153,7 @@
     --ov-nil: var(--color-extended-gray-600);
     --ov-punctuation: var(--color-extended-gray-600);
     --ov-special: var(--color-extended-gray-600);
+    --ov-vector: var(--color-purple-1000);
     --ov-error: var(--color-red-900);
     --ov-text: var(--text-primary);
     --ov-preview: var(--color-extended-gray-500);
@@ -153,6 +168,7 @@
     --ov-nil: var(--color-extended-gray-500);
     --ov-punctuation: var(--color-extended-gray-500);
     --ov-special: var(--color-extended-gray-500);
+    --ov-vector: var(--color-purple-500);
     --ov-error: var(--color-red-700);
     --ov-text: var(--text-primary);
     --ov-preview: var(--color-extended-gray-400);
@@ -177,6 +193,9 @@
   .ov-special {
     color: var(--ov-special);
     font-style: italic;
+  }
+  .ov-vector {
+    color: var(--ov-vector);
   }
   .ov-error {
     color: var(--ov-error);

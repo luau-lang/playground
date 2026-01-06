@@ -241,6 +241,36 @@ static void serializeValueToJson(lua_State* L, int idx, std::string& out, std::v
         case LUA_TTHREAD:
             out += "{\"type\":\"thread\"}";
             break;
+        case LUA_TVECTOR: {
+            const float* v = lua_tovector(L, idx);
+            if (v) {
+                out += "{\"type\":\"vector\",\"value\":[";
+                char buf[64];
+                for (int i = 0; i < LUA_VECTOR_SIZE; i++) {
+                    if (i > 0) out += ",";
+                    if (std::isnan(v[i])) {
+                        out += "\"nan\"";
+                    } else if (std::isinf(v[i])) {
+                        out += v[i] > 0 ? "\"inf\"" : "\"-inf\"";
+                    } else {
+                        snprintf(buf, sizeof(buf), "%.7g", v[i]);
+                        out += buf;
+                    }
+                }
+                out += "]}";
+            } else {
+                out += "{\"type\":\"vector\",\"value\":[0,0,0]}";
+            }
+            break;
+        }
+        case LUA_TBUFFER: {
+            size_t len = 0;
+            lua_tobuffer(L, idx, &len);
+            out += "{\"type\":\"buffer\",\"size\":";
+            out += std::to_string(len);
+            out += "}";
+            break;
+        }
         default:
             out += "{\"type\":\"nil\"}";
             break;
