@@ -1,8 +1,9 @@
 /**
  * Minimal JavaScript regex engine for vscode-textmate.
- * Uses pre-compiled patterns from compile-grammar.ts vite plugin
- * 
- * This eliminates the need for oniguruma-to-es, vscode-oniguruma and oniguruma WASM at runtime.
+ * Uses pre-compiled patterns from compile-grammar.ts vite plugin.
+ *
+ * Dynamically generated long-bracket end patterns (resolved backrefs) are
+ * handled with a small custom matcher to avoid runtime oniguruma-to-es usage.
  */
 
 import { compiledPatterns } from 'virtual:compiled-patterns';
@@ -24,26 +25,61 @@ interface OnigString {
   content: string;
 }
 
+interface LongBracketEndMatcher {
+  type: 'longBracketEnd';
+  needle: string;
+}
+
+type PatternMatcher = RegExp | LongBracketEndMatcher | null;
+
+const warnedPatterns = new Set<string>();
+
+function createLongBracketEndMatcher(pattern: string): LongBracketEndMatcher | null {
+  if (pattern.length < 4) return null;
+  if (pattern[0] !== '\\' || pattern[1] !== ']') return null;
+  if (pattern[pattern.length - 2] !== '\\' || pattern[pattern.length - 1] !== ']') return null;
+
+  for (let i = 2; i < pattern.length - 2; i++) {
+    if (pattern[i] !== '=') return null;
+  }
+
+  const equals = pattern.slice(2, -2);
+  return { type: 'longBracketEnd', needle: `]${equals}]` };
+}
+
 /**
  * JavaScript-based scanner compatible with vscode-textmate's IOnigScanner interface.
  */
 class JavaScriptScanner {
-  private regexps: (RegExp | null)[];
+  private matchers: PatternMatcher[];
 
   constructor(patterns: string[]) {
-    this.regexps = patterns.map((pattern) => {
+    this.matchers = patterns.map((pattern) => {
       const compiled = compiledPatterns[pattern];
-      if (!compiled) {
-        // Pattern not in cache - this shouldn't happen for Luau grammar
-        console.warn(`[JS Scanner] Pattern not pre-compiled: ${pattern.slice(0, 50)}`);
+      if (compiled) {
+        try {
+          return new RegExp(compiled[0], compiled[1]);
+        } catch {
+          console.warn(`[JS Scanner] Failed to construct RegExp: ${pattern.slice(0, 50)}`);
+          return null;
+        }
+      }
+
+      if (compiled === null) {
         return null;
       }
-      try {
-        return new RegExp(compiled[0], compiled[1]);
-      } catch (e) {
-        console.warn(`[JS Scanner] Failed to construct RegExp: ${pattern.slice(0, 50)}`);
-        return null;
+
+      const longBracketMatcher = createLongBracketEndMatcher(pattern);
+      if (longBracketMatcher) {
+        return longBracketMatcher;
       }
+
+      if (!warnedPatterns.has(pattern)) {
+        warnedPatterns.add(pattern);
+        console.warn(`[JS Scanner] No compiled pattern for: ${pattern.slice(0, 50)}`);
+      }
+
+      return null;
     });
   }
 
@@ -52,34 +88,48 @@ class JavaScriptScanner {
     startPosition: number
   ): Match | null {
     const str = typeof string === 'string' ? string : string.content;
-    const pending: [number, RegExpExecArray][] = [];
+    const pending: Array<
+      | { index: number; match: RegExpExecArray; patternIndex: number }
+      | { index: number; start: number; end: number; patternIndex: number }
+    > = [];
 
-    for (let i = 0; i < this.regexps.length; i++) {
-      const regexp = this.regexps[i];
-      if (!regexp) continue;
+    for (let i = 0; i < this.matchers.length; i++) {
+      const matcher = this.matchers[i];
+      if (!matcher) continue;
 
-      try {
-        regexp.lastIndex = startPosition;
-        const match = regexp.exec(str);
-        if (!match) continue;
+      if (matcher instanceof RegExp) {
+        try {
+          matcher.lastIndex = startPosition;
+          const match = matcher.exec(str);
+          if (!match) continue;
 
-        // If match starts at startPosition, return immediately
-        if (match.index === startPosition) {
-          return this.toResult(i, match);
+          if (match.index === startPosition) {
+            return this.toResult(i, match);
+          }
+          pending.push({ index: match.index, match, patternIndex: i });
+        } catch {
+          continue;
         }
-        pending.push([i, match]);
-      } catch {
-        continue;
+      } else if (matcher.type === 'longBracketEnd') {
+        const index = str.indexOf(matcher.needle, startPosition);
+        if (index === -1) continue;
+        const end = index + matcher.needle.length;
+        if (index === startPosition) {
+          return this.toResultRange(i, index, end);
+        }
+        pending.push({ index, start: index, end, patternIndex: i });
       }
     }
 
     // Return the match with the earliest start position
     if (pending.length) {
-      const minIndex = Math.min(...pending.map((m) => m[1].index));
-      for (const [i, match] of pending) {
-        if (match.index === minIndex) {
-          return this.toResult(i, match);
+      const minIndex = Math.min(...pending.map((m) => m.index));
+      for (const entry of pending) {
+        if (entry.index !== minIndex) continue;
+        if ('match' in entry) {
+          return this.toResult(entry.patternIndex, entry.match);
         }
+        return this.toResultRange(entry.patternIndex, entry.start, entry.end);
       }
     }
 
@@ -101,6 +151,13 @@ class JavaScriptScanner {
       }),
     };
   }
+
+  private toResultRange(index: number, start: number, end: number): Match {
+    return {
+      index,
+      captureIndices: [{ start, end, length: end - start }],
+    };
+  }
 }
 
 /**
@@ -119,4 +176,3 @@ export function createJsOnigLib() {
     createOnigString: (str: string) => new OnigStringImpl(str),
   });
 }
-
