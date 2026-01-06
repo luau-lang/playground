@@ -12,8 +12,7 @@ import { bracketMatching, indentOnInput } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 
-import { luauTextMate, initLuauTextMate } from './textmate';
-export { initLuauTextMate };
+import { luau } from '$lib/codemirror-lang-luau/index.js';
 import { darkTheme, lightTheme } from './themes';
 import { luauLspExtensions } from './lspExtensions';
 import { forceLinting, lintGutter } from '@codemirror/lint';
@@ -67,7 +66,7 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     ]),
     
     // Luau language + LSP extensions
-    luauTextMate(),
+    luau(),
     ...luauLspExtensions(),
     
     // Theme (dynamic)
