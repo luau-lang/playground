@@ -1,0 +1,283 @@
+@precedence {
+  or @left,
+  and @left,
+  compare @left,
+  shift @left,
+  concat @right,
+  plus @left,
+  times @left,
+  power @right,
+  call,
+  prefix,
+  as @left,
+  optional @right,
+  typeAnd @left,
+  typeOr @left,
+  typeargs
+}
+
+@top Chunk { Block }
+
+Block { Statement* LastStatement? }
+
+Statement {
+  SimpleStatement |
+  DoStatement |
+  WhileStatement |
+  RepeatStatement |
+  IfStatement |
+  ForNumericStatement |
+  ForGenericStatement |
+  FunctionDeclaration |
+  LocalFunctionDeclaration |
+  LocalDeclaration |
+  TypeDeclaration |
+  ExportTypeDeclaration |
+  TypeFunctionDeclaration |
+  ExportTypeFunctionDeclaration
+}
+
+LastStatement {
+  ReturnStatement |
+  BreakStatement |
+  ContinueStatement
+}
+
+SimpleStatement {
+  VarList AssignOp ExpList |
+  AssignableExpression CompoundAssignOp Expression |
+  CallStatement
+}
+
+ReturnStatement { kw<"return"> ExpList? }
+BreakStatement { kw<"break"> }
+ContinueStatement { ckw<"continue"> }
+
+DoStatement { kw<"do"> Block kw<"end"> }
+WhileStatement { kw<"while"> Expression kw<"do"> Block kw<"end"> }
+RepeatStatement { kw<"repeat"> Block kw<"until"> Expression }
+IfStatement { kw<"if"> Expression kw<"then"> Block (kw<"elseif"> Expression kw<"then"> Block)* (kw<"else"> Block)? kw<"end"> }
+ForNumericStatement { kw<"for"> Binding AssignOp Expression "," Expression ("," Expression)? kw<"do"> Block kw<"end"> }
+ForGenericStatement { kw<"for"> BindingList kw<"in"> ExpList kw<"do"> Block kw<"end"> }
+
+FunctionDeclaration { Attributes? kw<"function"> FunctionName FunctionBody }
+LocalFunctionDeclaration { Attributes? kw<"local"> kw<"function"> Name FunctionBody }
+
+LocalDeclaration { kw<"local"> BindingList (AssignOp ExpList)? }
+
+TypeDeclaration { ckw<"type"> Name TypeParamsWithDefaults? AssignOp Type }
+ExportTypeDeclaration { ckw<"export"> ckw<"type"> Name TypeParamsWithDefaults? AssignOp Type }
+TypeFunctionDeclaration { ckw<"type"> kw<"function"> Name FunctionBody }
+ExportTypeFunctionDeclaration { ckw<"export"> ckw<"type"> kw<"function"> Name FunctionBody }
+
+FunctionName { Name ("." Name)* (TypeColon Name)? }
+
+FunctionBody { TypeParams? ParamList ReturnType? Block kw<"end"> }
+
+ParamList { ParenL ParamListInner? ParenR }
+ParamListInner { Param ("," Param)* }
+Param { Binding | VarArgParam }
+VarArgParam { "..." VarArgAnnotation? }
+VarArgAnnotation { TypeColon VarArgType }
+VarArgType { GenericTypePack | Type }
+
+BindingList { Binding ("," Binding)* }
+Binding { Name TypeAnnotation? }
+TypeAnnotation { TypeColon Type }
+
+ReturnType { TypeColon ReturnTypeValue }
+ReturnTypeValue { TypeOrPack }
+
+VarList { AssignableExpression ("," AssignableExpression)* }
+AssignableExpression { PrimaryExpression FieldSuffix* }
+FieldExpression { PrimaryExpression !call FieldSuffix+ }
+
+CallStatement { CallExpression }
+
+FieldSuffix { "." Name | BracketL Expression BracketR }
+CallSuffix { FunctionArgs | TypeColon Name FunctionArgs }
+CallExpression {
+  PrimaryExpression !call CallSuffix FieldSuffix* |
+  PrimaryExpression !call FieldSuffix+ CallSuffix FieldSuffix*
+}
+
+ParenthesizedExpression { ParenL Expression ParenR }
+PrimaryExpression { Name | ParenthesizedExpression }
+
+FunctionArgs { ParenL ExpList? ParenR | TableConstructor | String | LongString | InterpolatedString }
+
+Expression { BinaryExpression | UnaryExpression | AsExpression | SimpleExpression }
+
+BinaryExpression {
+  Expression !or kw<"or"> Expression |
+  Expression !and kw<"and"> Expression |
+  Expression !compare CompareOp Expression |
+  Expression !shift ShiftOp Expression |
+  Expression !concat ".." Expression |
+  Expression !plus ("+" | "-") Expression |
+  Expression !times ("*" | "/" | "//" | "%") Expression |
+  Expression !power "^" Expression
+}
+
+UnaryExpression { !prefix UnaryOp Expression }
+UnaryOp { "-" | kw<"not"> | "#" | "~" }
+
+AsExpression { SimpleExpression !as TypeCast Type }
+
+CompareOp { "==" | "~=" | "<" | "<=" | ">" | ">=" }
+ShiftOp { "<<" | ">>" | ">>>" }
+
+SimpleExpression {
+  Number |
+  String |
+  LongString |
+  InterpolatedString |
+  kw<"nil"> |
+  kw<"true"> |
+  kw<"false"> |
+  "..." |
+  TableConstructor |
+  FunctionExpression |
+  PrimaryExpression |
+  FieldExpression |
+  CallExpression |
+  IfExpression
+}
+
+FunctionExpression { Attributes? kw<"function"> FunctionBody }
+
+IfExpression { kw<"if"> Expression kw<"then"> Expression (kw<"elseif"> Expression kw<"then"> Expression)* kw<"else"> Expression }
+
+ExpList { Expression ("," Expression)* }
+
+TableConstructor { BraceL FieldList? BraceR }
+FieldList { Field (FieldSep Field)* FieldSep? }
+Field { BracketL Expression BracketR AssignOp Expression | Name AssignOp Expression | Expression }
+FieldSep { "," | ";" }
+
+Attributes { Attribute+ }
+Attribute { "@" Name | "@[" AttributeParamList? "]" }
+AttributeParamList { AttributeParam ("," AttributeParam)* }
+AttributeParam { Name AttributeArgs? }
+AttributeArgs { ParenL LiteralList? ParenR | TableConstructor | String | LongString }
+
+LiteralList { Literal ("," Literal)* }
+Literal { kw<"nil"> | kw<"true"> | kw<"false"> | Number | String | LongString | TableConstructor }
+
+InterpolatedString[isolate] { InterpStart InterpPart* InterpEnd }
+InterpPart { InterpChunk | Interpolation }
+Interpolation { InterpOpen Expression InterpClose }
+
+Type { UnionType }
+UnionType { UnionType !typeOr "|" IntersectionType | IntersectionType }
+IntersectionType { IntersectionType !typeAnd "&" OptionalType | OptionalType }
+OptionalType { SimpleType | SimpleType !optional "?" }
+
+SimpleType {
+  kw<"nil"> |
+  SingletonType |
+  kw<"typeof"> ParenL Expression ParenR |
+  TypeReference |
+  TableType |
+  FunctionType |
+  ParenthesizedType
+}
+
+SingletonType { String | kw<"true"> | kw<"false"> }
+
+TypeReference { TypeName | TypeName !typeargs TypeArgs }
+TypeName { Name ("." Name)* }
+TypeArgs { "<" TypeParamList? ">" }
+TypeParamList { TypeParam ("," TypeParam)* }
+TypeParam { Type | TypePack | VariadicTypePack | GenericTypePack }
+
+ParenthesizedType { ParenL Type ParenR }
+
+TypePack { ParenL TypePackList? ParenR }
+TypePackList { Type ("," (Type | VariadicTypePack))+ }
+
+VariadicTypePack { "..." Type }
+GenericTypePack { Name "..." }
+
+TableType { BraceL Type BraceR | BraceL PropList? BraceR }
+PropList { TableProp (FieldSep TableProp)* FieldSep? | TableIndexer (FieldSep TableProp)* FieldSep? }
+TableProp { ReadWrite? Name TypeColon Type }
+TableIndexer { ReadWrite? BracketL Type BracketR TypeColon Type }
+ReadWrite { ckw<"read"> | ckw<"write"> }
+
+BoundTypeList { BoundType ("," BoundType)* | GenericTypePack | VariadicTypePack }
+BoundType { Name TypeColon Type }
+
+FunctionType { TypeParams? ParenL BoundTypeList? ParenR TypeArrow ReturnTypeValue }
+
+TypeParams { "<" GenericTypeList? ">" }
+GenericTypeList { GenericTypeParam ("," GenericTypeParam)* }
+GenericTypeParam { Name | GenericTypePack }
+
+TypeParamsWithDefaults { "<" GenericTypeListWithDefaults? ">" }
+GenericTypeListWithDefaults { GenericTypeParamWithDefault ("," GenericTypeParamWithDefault)* }
+GenericTypeParamWithDefault { Name (AssignOp Type)? | GenericTypePack AssignOp TypePackDefault }
+TypePackDefault { TypePack | VariadicTypePack | GenericTypePack }
+TypeOrPack { Type | TypePack | VariadicTypePack | GenericTypePack }
+
+kw<term> { @specialize[@name={term}]<Identifier, term> }
+ckw<term> { @extend[@name={term}]<Identifier, term> }
+
+Name { Identifier }
+
+AssignOp { "=" }
+CompoundAssignOp { "+=" | "-=" | "*=" | "/=" | "//=" | "%=" | "^=" | "..=" }
+
+@external tokens longBracket from "./tokenizer.js" { LongString, LongComment }
+@external tokens backtickTokens from "./tokenizer.js" { InterpStart, InterpChunk, InterpEnd, InterpOpen, InterpClose }
+@context luauContext from "./tokenizer.js"
+
+@skip { Space | Newline | LineComment | LongComment }
+
+@tokens {
+  Space { $[\u0009\u000b\u000c\u0020\u00a0]+ }
+  Newline { $[\r\n] }
+
+  LineComment { "--" ![\n]* }
+
+  Number {
+    "0x" $[0-9a-fA-F]+ ("." $[0-9a-fA-F]+)? (("p" | "P") ("+" | "-")? @digit+)? |
+    @digit+ ("." @digit*)? (("e" | "E") ("+" | "-")? @digit+)? |
+    "." @digit+ (("e" | "E") ("+" | "-")? @digit+)?
+  }
+
+  identifierStart { @asciiLetter | "_" }
+  identifierChar { identifierStart | @digit }
+  Identifier { identifierStart identifierChar* }
+
+  Escape { "\\" ![\n] }
+  StringContentDouble { ![\\\n"]+ }
+  StringContentSingle { ![\\\n']+ }
+
+  BraceL { "{" }
+  BraceR { "}" }
+  ParenL { "(" }
+  ParenR { ")" }
+  BracketL { "[" }
+  BracketR { "]" }
+
+  TypeArrow { "->" }
+  TypeCast { "::" }
+  TypeColon { ":" }
+
+  @precedence { "...", "..", "." }
+  @precedence { "//=", "//", "/" }
+  @precedence { "<<", "<=", "<" }
+  @precedence { ">>>", ">>", ">=", ">" }
+  @precedence { TypeArrow, "+=", "+", "-=", "-" }
+  @precedence { "..=", ".." }
+  @precedence { TypeCast, TypeColon }
+  @precedence { LineComment, "-" }
+}
+
+@skip {} {
+  String[isolate] {
+    '"' (StringContentDouble | Escape)* ('"' | "\n") |
+    "'" (StringContentSingle | Escape)* ("'" | "\n")
+  }
+}

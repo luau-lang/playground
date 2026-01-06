@@ -13,9 +13,6 @@
   onMount(async () => {    
     editorModule = await import('$lib/editor/setup');
     
-    // Initialize TextMate grammar (no WASM, resolves immediately)
-    await editorModule.initLuauTextMate();
-    
     editorModule.createEditor(editorContainer, $files[$activeFile] || '', (content) => {
       if ($activeFile) {
         updateFile($activeFile, content);
@@ -72,4 +69,3 @@
     </div>
   {/if}
 </div>
-
