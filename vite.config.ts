@@ -7,13 +7,12 @@ import path from 'path';
 import { preloadDynamicChunks } from './vite/preload-chunks';
 import { prerenderPlugin } from './vite/prerender';
 import { inlineCss } from './vite/inline-css';
-import { compileGrammarPlugin } from './vite/compile-grammar';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [compileGrammarPlugin(), svelte(), tailwindcss(), preloadDynamicChunks(), prerenderPlugin(), inlineCss()],
+  plugins: [svelte(), tailwindcss(), preloadDynamicChunks(), prerenderPlugin(), inlineCss()],
   resolve: {
     alias: {
       '$lib': path.resolve(__dirname, './src/lib'),
