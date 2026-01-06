@@ -1,8 +1,8 @@
 /**
  * Luau WASM Module Loader and Runner
  * 
- * Uses two Web Workers:
- * - Analysis worker (long-lived): LSP, bytecode, type checking - always responsive
+ * Uses two workers:
+ * - Analysis worker (long-lived): LSP, bytecode, type checking - shared when available
  * - Execution worker (on-demand): code execution - can be terminated for infinite loops
  */
 
@@ -16,6 +16,7 @@ import type {
 } from './types';
 import type { WorkerRequest, WorkerResponse } from './luau.worker';
 import LuauWorker from './luau.worker?worker';
+import LuauSharedWorker from './luau.worker?sharedworker';
 
 declare const __wasmPromises: { luau: Promise<ArrayBuffer> } | undefined;
 
@@ -63,7 +64,9 @@ async function getCompiledWasmModule(): Promise<WebAssembly.Module> {
 // ============================================================================
 
 interface WorkerManager {
-  worker: Worker | null;
+  worker: Worker | SharedWorker | null;
+  port: MessagePort | null;
+  isShared: boolean;
   ready: boolean;
   readyPromise: Promise<void> | null;
   pendingRequests: Map<string, {
@@ -76,6 +79,8 @@ interface WorkerManager {
 function createWorkerManager(): WorkerManager {
   return {
     worker: null,
+    port: null,
+    isShared: false,
     ready: false,
     readyPromise: null,
     pendingRequests: new Map(),
@@ -83,10 +88,25 @@ function createWorkerManager(): WorkerManager {
   };
 }
 
+function isSharedWorker(worker: Worker | SharedWorker): worker is SharedWorker {
+  return 'port' in worker;
+}
+
+function getMessageTarget(manager: WorkerManager): Worker | MessagePort {
+  if (manager.port) {
+    return manager.port;
+  }
+  if (!manager.worker) {
+    throw new Error('Worker not initialized');
+  }
+  return manager.worker;
+}
+
 function setupWorkerHandlers(manager: WorkerManager, name: string): void {
   if (!manager.worker) return;
+  const target = getMessageTarget(manager);
   
-  manager.worker.onmessage = (e: MessageEvent<WorkerResponse & { requestId: string }>) => {
+  target.onmessage = (e: MessageEvent<WorkerResponse & { requestId: string }>) => {
     const { requestId, ...response } = e.data;
     
     const pending = manager.pendingRequests.get(requestId);
@@ -98,6 +118,11 @@ function setupWorkerHandlers(manager: WorkerManager, name: string): void {
         pending.resolve(response);
       }
     }
+  };
+  
+  target.onmessageerror = (e) => {
+    console.error(`[Luau ${name}] Worker message error:`, e);
+    terminateWorker(manager, 'Worker message error');
   };
   
   manager.worker.onerror = (e) => {
@@ -134,7 +159,7 @@ async function initializeWorker(manager: WorkerManager, wasmModule: WebAssembly.
       },
     });
     
-    manager.worker!.postMessage(
+    getMessageTarget(manager).postMessage(
       { type: 'init', wasmModule, requestId } satisfies WorkerRequest & { requestId: string }
     );
   });
@@ -160,7 +185,7 @@ async function sendToWorker<K extends WorkerRequest['type']>(
       resolve: resolve as (value: WorkerResponse) => void, 
       reject 
     });
-    manager.worker!.postMessage({ ...request, requestId });
+    getMessageTarget(manager).postMessage({ ...request, requestId });
   });
 }
 
@@ -169,15 +194,21 @@ function terminateWorker(manager: WorkerManager, errorMessage: string = STOPPED_
   manager.ready = false;
   
   if (manager.worker) {
-    manager.worker.terminate();
+    if (manager.isShared) {
+      manager.port?.close();
+    } else {
+      manager.worker.terminate();
+    }
     manager.worker = null;
+    manager.port = null;
+    manager.isShared = false;
   }
   
   rejectAllPending(manager, new Error(errorMessage));
 }
 
 // ============================================================================
-// Shared Worker Loading
+// Worker Loading
 // ============================================================================
 
 async function loadWorker(
@@ -186,6 +217,7 @@ async function loadWorker(
   options?: { 
     checkTerminated?: boolean;
     postInit?: () => Promise<void>;
+    createWorker?: () => Worker | SharedWorker;
   }
 ): Promise<void> {
   if (manager.ready && manager.worker) {
@@ -196,12 +228,15 @@ async function loadWorker(
     return manager.readyPromise;
   }
 
-  const { checkTerminated = false, postInit } = options ?? {};
+  const { checkTerminated = false, postInit, createWorker } = options ?? {};
 
   manager.readyPromise = (async () => {
     try {
       const modulePromise = getCompiledWasmModule();
-      manager.worker = new LuauWorker();
+      manager.worker = createWorker?.() ?? new LuauWorker();
+      manager.isShared = isSharedWorker(manager.worker);
+      manager.port = manager.isShared ? manager.worker.port : null;
+      manager.port?.start();
       setupWorkerHandlers(manager, name);
       
       const wasmModule = await modulePromise;
@@ -239,8 +274,20 @@ async function loadWorker(
 
 const analysis = createWorkerManager();
 
+function createAnalysisWorker(): Worker | SharedWorker {
+  if (typeof SharedWorker !== 'undefined') {
+    try {
+      return new LuauSharedWorker();
+    } catch (error) {
+      console.warn('[Luau] SharedWorker unavailable, falling back to Web Worker.', error);
+    }
+  }
+  return new LuauWorker();
+}
+
 async function loadAnalysisWorker(): Promise<void> {
   return loadWorker(analysis, 'Analysis', {
+    createWorker: createAnalysisWorker,
     postInit: async () => {
       const currentSettings = get(settings);
       await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });

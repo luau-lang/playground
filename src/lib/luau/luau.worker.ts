@@ -104,140 +104,157 @@ function registerFile(
   }
 }
 
-// Helper to send response with requestId
-function respond(requestId: string, response: WorkerResponse): void {
-  self.postMessage({ ...response, requestId });
+function createMessageHandler(postMessage: (message: WorkerResponse & { requestId: string }) => void) {
+  const respond = (requestId: string, response: WorkerResponse): void => {
+    postMessage({ ...response, requestId });
+  };
+
+  return async (e: MessageEvent<WorkerRequest & { requestId: string }>) => {
+    const { requestId, ...request } = e.data;
+    
+    try {
+      switch (request.type) {
+        case 'init': {
+          // Store the pre-compiled WebAssembly.Module from main thread
+          if (!compiledWasmModule) {
+            compiledWasmModule = request.wasmModule;
+          }
+          await loadModule();
+          respond(requestId, { type: 'ready' });
+          break;
+        }
+        
+        case 'execute': {
+          const module = await loadModule();
+          const startTime = performance.now();
+          const resultJson = module.ccall('luau_execute', 'string', ['string'], [request.code]);
+          const elapsed = performance.now() - startTime;
+          if (!resultJson) {
+            respond(requestId, { 
+              type: 'execute', 
+              result: { success: false, output: '', error: 'No result returned from execution' },
+              elapsed
+            });
+          } else {
+            const parsed = JSON.parse(resultJson) as ExecuteResult;
+            respond(requestId, { type: 'execute', result: parsed, elapsed });
+          }
+          break;
+        }
+        
+        case 'getDiagnostics': {
+          const module = await loadModule();
+          const startTime = performance.now();
+          const resultJson = module.ccall('luau_get_diagnostics', 'string', ['string'], [request.code]);
+          const elapsed = performance.now() - startTime;
+          const result = JSON.parse(resultJson) as DiagnosticsResult;
+          respond(requestId, { type: 'getDiagnostics', result, elapsed });
+          break;
+        }
+        
+        case 'autocomplete': {
+          const module = await loadModule();
+          const resultJson = module.ccall('luau_autocomplete', 'string', ['string', 'number', 'number'], [request.code, request.line, request.col]);
+          const result = JSON.parse(resultJson) as AutocompleteResult;
+          respond(requestId, { type: 'autocomplete', result });
+          break;
+        }
+        
+        case 'hover': {
+          const module = await loadModule();
+          const resultJson = module.ccall('luau_hover', 'string', ['string', 'number', 'number'], [request.code, request.line, request.col]);
+          const result = JSON.parse(resultJson) as HoverResult;
+          respond(requestId, { type: 'hover', result });
+          break;
+        }
+        
+        case 'getModules': {
+          const module = await loadModule();
+          const resultJson = module.ccall('luau_get_modules', 'string', [], []);
+          const result = JSON.parse(resultJson) as { modules: string[] };
+          respond(requestId, { type: 'getModules', result });
+          break;
+        }
+        
+        case 'setMode': {
+          const module = await loadModule();
+          module.ccall('luau_set_mode', null, ['number'], [request.mode]);
+          respond(requestId, { type: 'setMode', success: true });
+          break;
+        }
+        
+        case 'setSolver': {
+          const module = await loadModule();
+          module.ccall('luau_set_solver', null, ['boolean'], [request.isNew]);
+          respond(requestId, { type: 'setSolver', success: true });
+          break;
+        }
+        
+        case 'getBytecode': {
+          const module = await loadModule();
+          const resultJson = module.ccall(
+            'luau_dump_bytecode',
+            'string',
+            ['string', 'number', 'number', 'number', 'number'],
+            [request.code, request.optimizationLevel, request.debugLevel, request.outputFormat, request.showRemarks ? 1 : 0]
+          );
+          const result = JSON.parse(resultJson);
+          respond(requestId, { type: 'getBytecode', result });
+          break;
+        }
+        
+        case 'registerModules': {
+          const module = await loadModule();
+          // Clear existing modules first
+          module.ccall('luau_clear_modules', null, [], []);
+          // Register each module
+          for (const [name, content] of Object.entries(request.modules)) {
+            registerFile(module, name, content, 'luau_add_module');
+          }
+          respond(requestId, { type: 'registerModules', success: true });
+          break;
+        }
+        
+        case 'registerSources': {
+          const module = await loadModule();
+          for (const [name, content] of Object.entries(request.sources)) {
+            registerFile(module, name, content, 'luau_set_source');
+          }
+          respond(requestId, { type: 'registerSources', success: true });
+          break;
+        }
+        
+        default: {
+          const exhaustiveCheck: never = request;
+          respond(requestId, { type: 'error', error: `Unknown request type: ${(exhaustiveCheck as WorkerRequest).type}` });
+          break;
+        }
+      }
+    } catch (error) {
+      let errorMsg = 'Unknown error';
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (typeof error === 'number') {
+        errorMsg = `Uncaught exception (code: ${error})`;
+      } else {
+        errorMsg = String(error);
+      }
+      respond(requestId, { type: 'error', error: errorMsg });
+    }
+  };
 }
 
-// Handle messages from main thread
-self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) => {
-  const { requestId, ...request } = e.data;
-  
-  try {
-    switch (request.type) {
-      case 'init': {
-        // Store the pre-compiled WebAssembly.Module from main thread
-        compiledWasmModule = request.wasmModule;
-        await loadModule();
-        respond(requestId, { type: 'ready' });
-        break;
-      }
-      
-      case 'execute': {
-        const module = await loadModule();
-        const startTime = performance.now();
-        const resultJson = module.ccall('luau_execute', 'string', ['string'], [request.code]);
-        const elapsed = performance.now() - startTime;
-        if (!resultJson) {
-          respond(requestId, { 
-            type: 'execute', 
-            result: { success: false, output: '', error: 'No result returned from execution' },
-            elapsed
-          });
-        } else {
-          const parsed = JSON.parse(resultJson) as ExecuteResult;
-          respond(requestId, { type: 'execute', result: parsed, elapsed });
-        }
-        break;
-      }
-      
-      case 'getDiagnostics': {
-        const module = await loadModule();
-        const startTime = performance.now();
-        const resultJson = module.ccall('luau_get_diagnostics', 'string', ['string'], [request.code]);
-        const elapsed = performance.now() - startTime;
-        const result = JSON.parse(resultJson) as DiagnosticsResult;
-        respond(requestId, { type: 'getDiagnostics', result, elapsed });
-        break;
-      }
-      
-      case 'autocomplete': {
-        const module = await loadModule();
-        const resultJson = module.ccall('luau_autocomplete', 'string', ['string', 'number', 'number'], [request.code, request.line, request.col]);
-        const result = JSON.parse(resultJson) as AutocompleteResult;
-        respond(requestId, { type: 'autocomplete', result });
-        break;
-      }
-      
-      case 'hover': {
-        const module = await loadModule();
-        const resultJson = module.ccall('luau_hover', 'string', ['string', 'number', 'number'], [request.code, request.line, request.col]);
-        const result = JSON.parse(resultJson) as HoverResult;
-        respond(requestId, { type: 'hover', result });
-        break;
-      }
-      
-      case 'getModules': {
-        const module = await loadModule();
-        const resultJson = module.ccall('luau_get_modules', 'string', [], []);
-        const result = JSON.parse(resultJson) as { modules: string[] };
-        respond(requestId, { type: 'getModules', result });
-        break;
-      }
-      
-      case 'setMode': {
-        const module = await loadModule();
-        module.ccall('luau_set_mode', null, ['number'], [request.mode]);
-        respond(requestId, { type: 'setMode', success: true });
-        break;
-      }
-      
-      case 'setSolver': {
-        const module = await loadModule();
-        module.ccall('luau_set_solver', null, ['boolean'], [request.isNew]);
-        respond(requestId, { type: 'setSolver', success: true });
-        break;
-      }
-      
-      case 'getBytecode': {
-        const module = await loadModule();
-        const resultJson = module.ccall(
-          'luau_dump_bytecode',
-          'string',
-          ['string', 'number', 'number', 'number', 'number'],
-          [request.code, request.optimizationLevel, request.debugLevel, request.outputFormat, request.showRemarks ? 1 : 0]
-        );
-        const result = JSON.parse(resultJson);
-        respond(requestId, { type: 'getBytecode', result });
-        break;
-      }
-      
-      case 'registerModules': {
-        const module = await loadModule();
-        // Clear existing modules first
-        module.ccall('luau_clear_modules', null, [], []);
-        // Register each module
-        for (const [name, content] of Object.entries(request.modules)) {
-          registerFile(module, name, content, 'luau_add_module');
-        }
-        respond(requestId, { type: 'registerModules', success: true });
-        break;
-      }
-      
-      case 'registerSources': {
-        const module = await loadModule();
-        for (const [name, content] of Object.entries(request.sources)) {
-          registerFile(module, name, content, 'luau_set_source');
-        }
-        respond(requestId, { type: 'registerSources', success: true });
-        break;
-      }
-      
-      default: {
-        const exhaustiveCheck: never = request;
-        respond(requestId, { type: 'error', error: `Unknown request type: ${(exhaustiveCheck as WorkerRequest).type}` });
-        break;
-      }
+function attachMessagePort(port: MessagePort): void {
+  port.onmessage = createMessageHandler((message) => port.postMessage(message));
+  port.start();
+}
+
+if ('onconnect' in self) {
+  (self as SharedWorkerGlobalScope).onconnect = (event) => {
+    for (const port of event.ports) {
+      attachMessagePort(port);
     }
-  } catch (error) {
-    let errorMsg = 'Unknown error';
-    if (error instanceof Error) {
-      errorMsg = error.message;
-    } else if (typeof error === 'number') {
-      errorMsg = `Uncaught exception (code: ${error})`;
-    } else {
-      errorMsg = String(error);
-    }
-    respond(requestId, { type: 'error', error: errorMsg });
-  }
-};
+  };
+} else {
+  self.onmessage = createMessageHandler((message) => self.postMessage(message));
+}
