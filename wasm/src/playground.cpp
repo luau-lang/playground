@@ -1029,16 +1029,16 @@ EXPORT const char* luau_hover(const char* code, int line, int col) {
     
     Luau::FrontendOptions opts;
     opts.retainFullTypeGraphs = true;
-    opts.forAutocomplete = true;
+    opts.runLintChecks = false;
     g_frontend->check("main", opts);
     
     Luau::SourceModule* sourceModule = g_frontend->getSourceModule("main");
     
-    // With the new solver, forAutocomplete is disabled internally, so modules
-    // are stored in moduleResolver instead of moduleResolverForAutocomplete
-    Luau::ModulePtr module = g_useNewSolver 
-        ? g_frontend->moduleResolver.getModule("main")
-        : g_frontend->moduleResolverForAutocomplete.getModule("main");
+    // Resolve the checked module regardless of solver/forAutocomplete mode.
+    // Prefer moduleResolver, then fall back to moduleResolverForAutocomplete.
+    Luau::ModulePtr module = g_frontend->moduleResolver.getModule("main");
+    if (!module)
+        module = g_frontend->moduleResolverForAutocomplete.getModule("main");
     
     if (!sourceModule || !module) {
         return setResult("{\"content\":null}");
@@ -1050,17 +1050,45 @@ EXPORT const char* luau_hover(const char* code, int line, int col) {
     std::string typeStr;
     std::string name;
     
-    if (exprOrLocal.getExpr()) {
-        Luau::AstExpr* expr = exprOrLocal.getExpr();
-        
-        if (auto* localExpr = expr->as<Luau::AstExprLocal>()) {
-            name = std::string(localExpr->local->name.value);
-        } else if (auto* globalExpr = expr->as<Luau::AstExprGlobal>()) {
-            name = std::string(globalExpr->name.value);
+    // Derive a readable name if available (works for both expr and local)
+    if (auto maybeName = exprOrLocal.getName())
+    {
+        if (maybeName->value)
+            name = std::string(maybeName->value);
+    }
+    
+    // Prefer local binding types when hovering locals (e.g., parameters, LHS of assignments)
+    if (auto local = exprOrLocal.getLocal())
+    {
+        Luau::Symbol symbol(local);
+        Luau::ScopePtr scope = Luau::findScopeAtPosition(*module, position);
+        while (scope)
+        {
+            auto it = scope->bindings.find(symbol);
+            if (it != scope->bindings.end())
+            {
+                typeStr = Luau::toString(it->second.typeId, Luau::ToStringOptions{true});
+                break;
+            }
+            scope = scope->parent;
         }
-        
-        if (auto type = module->astTypes.find(expr)) {
-            typeStr = Luau::toString(*type);
+    }
+
+    // Otherwise (or if binding not found), use the canonical type at position
+    if (typeStr.empty())
+    {
+        if (auto ty = Luau::findTypeAtPosition(*module, *sourceModule, position))
+        {
+            typeStr = Luau::toString(*ty, Luau::ToStringOptions{true});
+        }
+    }
+
+    // Final fallback: show the expected type at position (e.g., from annotations)
+    if (typeStr.empty())
+    {
+        if (auto expected = Luau::findExpectedTypeAtPosition(*module, *sourceModule, position))
+        {
+            typeStr = Luau::toString(*expected, Luau::ToStringOptions{true});
         }
     }
     
