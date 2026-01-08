@@ -226,19 +226,43 @@ function escapeHtml(text: string): string {
 }
 
 /** Map token to inline style color using app CSS variables */
+function isDarkTheme(): boolean {
+  try {
+    const root = document?.documentElement;
+    const body = document?.body;
+    return !!(root?.classList.contains('dark') || body?.classList.contains('dark'));
+  } catch {
+    return false;
+  }
+}
+
 function tokenStyle(token: string | null): string | null {
+  const dark = isDarkTheme();
+  const palette = {
+    keyword: dark ? 'var(--color-blue-500)' : 'var(--color-blue-1000)',
+    string: dark ? 'var(--color-green-400)' : 'var(--color-green-900)',
+    number: dark ? 'var(--color-purple-500)' : 'var(--color-purple-1000)',
+    bool: dark ? 'var(--color-purple-500)' : 'var(--color-purple-1000)',
+    typeName: dark ? 'var(--color-blue-400)' : 'var(--color-blue-900)',
+    func: dark ? 'var(--color-carmine-400)' : 'var(--color-carmine-900)',
+    variable: dark ? 'var(--color-extended-gray-300)' : 'var(--color-extended-gray-900)',
+    operator: dark ? 'var(--color-carmine-400)' : 'var(--color-carmine-900)',
+    punctuation: dark ? 'var(--color-extended-gray-400)' : 'var(--color-extended-gray-800)',
+    comment: 'var(--color-extended-gray-600)'
+  };
+
   switch (token) {
-    case 'keyword': return 'color: var(--color-blue-500)';
-    case 'string': return 'color: var(--color-green-400)';
-    case 'number': return 'color: var(--color-purple-500)';
+    case 'keyword': return `color: ${palette.keyword}`;
+    case 'string': return `color: ${palette.string}`;
+    case 'number': return `color: ${palette.number}`;
     case 'bool':
-    case 'atom': return 'color: var(--color-purple-500)';
-    case 'typeName': return 'color: var(--color-blue-400)';
-    case 'variableName.function': return 'color: var(--color-carmine-400)';
-    case 'variableName': return 'color: var(--color-extended-gray-300)';
-    case 'operator': return 'color: var(--color-carmine-400)';
-    case 'punctuation': return 'color: var(--color-extended-gray-400)';
-    case 'comment': return 'color: var(--color-extended-gray-600); font-style: italic';
+    case 'atom': return `color: ${palette.bool}`;
+    case 'typeName': return `color: ${palette.typeName}`;
+    case 'variableName.function': return `color: ${palette.func}`;
+    case 'variableName': return `color: ${palette.variable}`;
+    case 'operator': return `color: ${palette.operator}`;
+    case 'punctuation': return `color: ${palette.punctuation}`;
+    case 'comment': return `color: ${palette.comment}; font-style: italic`;
     default: return null;
   }
 }
