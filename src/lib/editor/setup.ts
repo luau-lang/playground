@@ -24,6 +24,10 @@ import { get } from 'svelte/store';
 let editorView: EditorView | null = null;
 let onChangeCallback: ((content: string) => void) | null = null;
 
+// Track a separate EditorState per file so history is file-specific
+const fileStates = new Map<string, EditorState>();
+let currentFile: string | null = null;
+
 // Compartments for dynamic reconfiguration
 const themeCompartment = new Compartment();
 
@@ -167,6 +171,8 @@ export function destroyEditor(): void {
     editorView = null;
   }
   onChangeCallback = null;
+  fileStates.clear();
+  currentFile = null;
 }
 
 /**
@@ -185,6 +191,34 @@ export function updateEditorContent(content: string): void {
       });
     }
   }
+}
+
+/**
+ * Switch the active file by swapping the entire EditorState.
+ * Maintains an independent undo history per file.
+ */
+export function switchFile(fileName: string, content: string): void {
+  if (!editorView) return;
+
+  // Persist the current view state for the previously active file
+  if (currentFile) {
+    fileStates.set(currentFile, editorView.state);
+  }
+
+  let nextState = fileStates.get(fileName);
+
+  if (!nextState) {
+    // Create a fresh state for this file with its own history
+    nextState = EditorState.create({
+      doc: content,
+      extensions: createExtensions(onChangeCallback || (() => {})),
+    });
+    fileStates.set(fileName, nextState);
+  }
+
+  // Swap the entire state (brings along its own history stack)
+  editorView.setState(nextState);
+  currentFile = fileName;
 }
 
 /**

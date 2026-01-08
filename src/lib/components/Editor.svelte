@@ -35,7 +35,7 @@
     if (file && file !== currentFile && editorModule) {
       currentFile = file;
       const content = $files[file] || '';
-      editorModule.updateEditorContent(content);
+      editorModule.switchFile(file, content);
     }
   });
 
