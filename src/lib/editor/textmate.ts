@@ -215,3 +215,65 @@ export async function initLuauTextMate(): Promise<void> {
   }
 }
 
+/** Escape HTML for safe insertion */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Map token to inline style color using app CSS variables */
+function tokenStyle(token: string | null): string | null {
+  switch (token) {
+    case 'keyword': return 'color: var(--color-blue-500)';
+    case 'string': return 'color: var(--color-green-400)';
+    case 'number': return 'color: var(--color-purple-500)';
+    case 'bool':
+    case 'atom': return 'color: var(--color-purple-500)';
+    case 'typeName': return 'color: var(--color-blue-400)';
+    case 'variableName.function': return 'color: var(--color-carmine-400)';
+    case 'variableName': return 'color: var(--color-extended-gray-300)';
+    case 'operator': return 'color: var(--color-carmine-400)';
+    case 'punctuation': return 'color: var(--color-extended-gray-400)';
+    case 'comment': return 'color: var(--color-extended-gray-600); font-style: italic';
+    default: return null;
+  }
+}
+
+/**
+ * Highlight a Luau snippet to HTML using the loaded TextMate grammar.
+ * Returns HTML with inline-styled <span> segments.
+ */
+export async function highlightLuauHtml(snippet: string): Promise<string> {
+  await initTextMate();
+  if (!grammar) return `<span>${escapeHtml(snippet)}</span>`;
+
+  const lines = snippet.split(/\n/);
+  let ruleStack: vsctm.StateStack = vsctm.INITIAL;
+  const parts: string[] = [];
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    const res = grammar.tokenizeLine(line, ruleStack);
+    ruleStack = res.ruleStack;
+
+    for (let i = 0; i < res.tokens.length; i++) {
+      const t = res.tokens[i];
+      const start = t.startIndex;
+      const end = i < res.tokens.length - 1 ? res.tokens[i + 1].startIndex : line.length;
+      const text = escapeHtml(line.slice(start, end));
+      const tok = scopeToToken(t.scopes);
+      const style = tokenStyle(tok);
+      if (style) parts.push(`<span style="${style}">${text}</span>`);
+      else parts.push(text);
+    }
+
+    if (li < lines.length - 1) parts.push('\n');
+  }
+
+  return parts.join('');
+}
+

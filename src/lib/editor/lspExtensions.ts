@@ -13,6 +13,7 @@ import { autocompletion, startCompletion, type CompletionContext } from '@codemi
 import type { CompletionResult, Completion } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
 import { getDiagnostics, getAutocomplete, getHover, getAvailableModules, type LuauDiagnostic, type LuauCompletion } from '$lib/luau/wasm';
+import { highlightLuauHtml } from './textmate';
 
 // ============================================================================
 // Diagnostics (Linter)
@@ -250,6 +251,13 @@ function createLuauHover() {
         return null;
       }
       
+      // Precompute highlighted HTML if the content is a fenced luau block
+      let highlighted: string | null = null;
+      const codeBlockMatch = content ? content.match(/```luau\n([\s\S]*?)\n```/) : null;
+      if (codeBlockMatch) {
+        highlighted = await highlightLuauHtml(codeBlockMatch[1]);
+      }
+
       return {
         pos,
         above: true,
@@ -267,9 +275,8 @@ function createLuauHover() {
             overflow: hidden;
           `;
           
-          // Parse markdown code blocks
-          const codeBlockMatch = content.match(/```luau\n([\s\S]*?)\n```/);
-          if (codeBlockMatch) {
+          // Render code block with syntax highlighting
+          if (highlighted) {
             // Type info section
             const codeWrapper = document.createElement('div');
             codeWrapper.style.cssText = `
@@ -278,7 +285,7 @@ function createLuauHover() {
               // border-left: 3px solid var(--accent);
             `;
             const code = document.createElement('code');
-            code.textContent = codeBlockMatch[1];
+            code.innerHTML = highlighted;
             code.style.cssText = `
               color: var(--text-primary);
               white-space: pre-wrap;
