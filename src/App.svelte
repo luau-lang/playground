@@ -3,12 +3,58 @@
   import Editor from '$lib/components/Editor.svelte';
   import Output from '$lib/components/Output.svelte';
   import BytecodeView from '$lib/components/BytecodeView.svelte';
-  import { showBytecode } from '$lib/stores/settings';
+  import { settings, showBytecode } from '$lib/stores/settings';
+  import { files, activeFile } from '$lib/stores/playground';
   import { isEmbed, embedTheme } from '$lib/stores/embed';
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { loadLuauWasm } from '$lib/luau/wasm';
+  import { parseStateFromHash } from '$lib/utils/decode';
+  import type { Readable } from 'svelte/store';
+  import { onMount } from 'svelte';
 
   let mounted = $state(false);
+
+  function clearUrlHash(): void {
+    if (typeof window === 'undefined') return;
+    if (!window.location.hash || window.location.hash.length <= 1) return;
+    const url = new URL(window.location.href);
+    url.hash = '';
+    window.history.replaceState(null, '', url.toString());
+  }
+
+  onMount(() => {
+    const hadUrlState = parseStateFromHash(window.location.hash) !== null;
+    if (!hadUrlState) return;
+
+    let cleared = false;
+    const unsubs: Array<() => void> = [];
+
+    const watch = <T,>(store: Readable<T>) => {
+      let first = true;
+      unsubs.push(
+        store.subscribe(() => {
+          if (first) {
+            first = false;
+            return;
+          }
+          if (cleared) return;
+          cleared = true;
+          clearUrlHash();
+          // Stop watching after we've cleared once
+          for (const u of unsubs) u();
+        })
+      );
+    };
+
+    watch(files);
+    watch(activeFile);
+    watch(settings);
+    watch(showBytecode);
+
+    return () => {
+      for (const u of unsubs) u();
+    };
+  });
 
   // Initialize on mount
   $effect(() => {
