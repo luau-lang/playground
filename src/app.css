@@ -30,6 +30,7 @@
   font-family: "Builder Mono";
   font-style: normal;
   font-display: fallback;
+  font-variant-ligatures: none;
   src: url("/font/BuilderMono-Regular.woff2") format("woff2");
 }
 
@@ -120,6 +121,10 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+#app main {
+  font-variant-ligatures: none;
 }
 
 /* Light theme (default) */
