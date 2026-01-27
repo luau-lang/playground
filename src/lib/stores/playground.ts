@@ -1,6 +1,7 @@
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import type { OutputLine } from '$lib/utils/output';
+import { DEFAULT_FILENAME, PLAYGROUND_STORAGE_KEY } from '$lib/constants';
 
 // Re-export for backwards compatibility
 export type { OutputLine };
@@ -10,6 +11,12 @@ export interface PlaygroundState {
   activeFile: string;
   output: OutputLine[];
   isRunning: boolean;
+}
+
+interface PersistedPlaygroundStateV1 {
+  v: 1;
+  files: Record<string, string>;
+  activeFile: string;
 }
 
 // Default initial code
@@ -31,9 +38,31 @@ end
 print("Sum:", sum)
 `;
 
+function loadFromStorage(): { files: Record<string, string>; activeFile: string } | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const stored = localStorage.getItem(PLAYGROUND_STORAGE_KEY);
+    if (!stored) return null;
+
+    const parsed = JSON.parse(stored) as Partial<PersistedPlaygroundStateV1>;
+    if (parsed.v !== 1) return null;
+    if (!parsed.files || typeof parsed.files !== 'object') return null;
+    if (!parsed.activeFile || typeof parsed.activeFile !== 'string') return null;
+
+    const fileNames = Object.keys(parsed.files);
+    if (fileNames.length === 0) return null;
+
+    const active = parsed.activeFile in parsed.files ? parsed.activeFile : fileNames[0];
+    return { files: parsed.files as Record<string, string>, activeFile: active };
+  } catch {
+    return null;
+  }
+}
+
 // Load initial state from URL if available
 function getInitialState(): { files: Record<string, string>; activeFile: string } {
-  const defaultState = { files: { 'main.luau': defaultCode }, activeFile: 'main.luau' };
+  const defaultState = { files: { [DEFAULT_FILENAME]: defaultCode }, activeFile: DEFAULT_FILENAME };
   
   if (typeof window === 'undefined') {
     return defaultState;
@@ -41,7 +70,7 @@ function getInitialState(): { files: Record<string, string>; activeFile: string 
   
   const state = parseStateFromHash(window.location.hash);
   if (!state || Object.keys(state.files).length === 0) {
-    return defaultState;
+    return loadFromStorage() ?? defaultState;
   }
   
   const active = state.active in state.files ? state.active : Object.keys(state.files)[0];
@@ -60,6 +89,45 @@ export const cursorLine = writable<number>(1);
 
 export function setExecutionTime(ms: number | null) {
   executionTime.set(ms);
+}
+
+function debounce(fn: () => void, ms: number): () => void {
+  let t: ReturnType<typeof setTimeout> | null = null;
+  return () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      t = null;
+      fn();
+    }, ms);
+  };
+}
+
+function saveToStorage(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const f = get(files);
+    const a = get(activeFile);
+    const fileNames = Object.keys(f);
+    if (fileNames.length === 0) return;
+
+    const state: PersistedPlaygroundStateV1 = {
+      v: 1,
+      files: f,
+      activeFile: a in f ? a : fileNames[0],
+    };
+
+    localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// Persist editor state (files + active file) between reloads
+if (typeof window !== 'undefined') {
+  const scheduleSave = debounce(saveToStorage, 250);
+  files.subscribe(() => scheduleSave());
+  activeFile.subscribe(() => scheduleSave());
 }
 
 // Actions

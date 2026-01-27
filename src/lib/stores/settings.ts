@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
-import { STORAGE_KEY, defaultSettings } from '$lib/constants';
+import { STORAGE_KEY, UI_STORAGE_KEY, defaultSettings } from '$lib/constants';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -61,6 +61,32 @@ function loadSettingsFromStorage(): PlaygroundSettings {
   return { ...defaultSettings };
 }
 
+function loadUiFromStorage(): { showBytecode: boolean } {
+  if (typeof window === 'undefined') {
+    return { showBytecode: false };
+  }
+
+  try {
+    const stored = localStorage.getItem(UI_STORAGE_KEY);
+    if (!stored) return { showBytecode: false };
+
+    const parsed = JSON.parse(stored) as { showBytecode?: unknown };
+    return { showBytecode: parsed.showBytecode === true };
+  } catch {
+    return { showBytecode: false };
+  }
+}
+
+function saveUiToStorage(state: { showBytecode: boolean }): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings {
   return {
     mode: partial.mode ?? defaultSettings.mode,
@@ -83,7 +109,7 @@ function loadSettings(): { settings: PlaygroundSettings; showBytecode: boolean }
     ? mergeSettings(settingsFromUrl)
     : loadSettingsFromStorage();
 
-  const showBytecode = showFromUrl ?? false;
+  const showBytecode = showFromUrl ?? loadUiFromStorage().showBytecode;
 
   return {
     settings,
@@ -111,6 +137,11 @@ export const showBytecode = writable<boolean>(initialState.showBytecode);
 // Auto-save settings when they change
 settings.subscribe((value) => {
   saveSettings(value);
+});
+
+// Auto-save UI state when it changes
+showBytecode.subscribe((value) => {
+  saveUiToStorage({ showBytecode: value });
 });
 
 export function setMode(mode: LuauMode): void {
