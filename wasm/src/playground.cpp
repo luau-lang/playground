@@ -35,7 +35,6 @@
 
 // Feature flags for new solver
 LUAU_FASTFLAG(LuauSolverV2)
-LUAU_FASTFLAG(LuauUseWorkspacePropToChooseSolver)
 
 // Luau VM headers
 #include "lua.h"
@@ -810,7 +809,6 @@ static void ensureAnalysisInit() {
     
     // Set feature flags for the new solver before any initialization
     FFlag::LuauSolverV2.value = g_useNewSolver;
-    FFlag::LuauUseWorkspacePropToChooseSolver.value = true;
     
     g_fileResolver = std::make_unique<PlaygroundFileResolver>();
     g_configResolver = std::make_unique<PlaygroundConfigResolver>();
@@ -885,9 +883,7 @@ EXPORT void luau_set_solver(bool useNew) {
     
     // Set feature flags for the new solver
     // Both flags are needed: LuauSolverV2 enables the new solver globally,
-    // LuauUseWorkspacePropToChooseSolver allows per-frontend solver selection
     FFlag::LuauSolverV2.value = useNew;
-    FFlag::LuauUseWorkspacePropToChooseSolver.value = true;
     
     // Reset frontend to apply new solver (solver mode is set at initialization)
     if (g_frontend) {
