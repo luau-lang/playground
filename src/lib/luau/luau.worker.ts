@@ -79,8 +79,7 @@ async function loadModule(): Promise<LuauWasmModule> {
 }
 
 /**
- * Register a file with both its original name and without extension.
- * This allows require("foo") to work for "foo.luau".
+ * Register a file by its exact name.
  */
 function registerFile(
   module: LuauWasmModule,
@@ -88,19 +87,10 @@ function registerFile(
   content: string,
   fn: 'luau_add_module' | 'luau_set_source'
 ): void {
-  // Use type narrowing to satisfy TypeScript's overload resolution
-  const register = (filename: string) => {
-    if (fn === 'luau_add_module') {
-      module.ccall('luau_add_module', null, ['string', 'string'], [filename, content]);
-    } else {
-      module.ccall('luau_set_source', null, ['string', 'string'], [filename, content]);
-    }
-  };
-
-  register(name);
-  const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
-  if (nameWithoutExt !== name) {
-    register(nameWithoutExt);
+  if (fn === 'luau_add_module') {
+    module.ccall('luau_add_module', null, ['string', 'string'], [name, content]);
+  } else {
+    module.ccall('luau_set_source', null, ['string', 'string'], [name, content]);
   }
 }
 
@@ -216,6 +206,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
       
       case 'registerSources': {
         const module = await loadModule();
+        // Replace the full analysis source set so renames/deletes are reflected.
+        module.ccall('luau_clear_sources', null, [], []);
         for (const [name, content] of Object.entries(request.sources)) {
           registerFile(module, name, content, 'luau_set_source');
         }

@@ -258,6 +258,11 @@ async function sendAnalysisRequest<K extends WorkerRequest['type']>(
   return sendToWorker(analysis, type, params);
 }
 
+async function syncAnalysisSources(): Promise<void> {
+  const allFiles = getAllFiles();
+  await sendAnalysisRequest('registerSources', { sources: allFiles });
+}
+
 // ============================================================================
 // Execution Worker - On-demand for code execution (can be terminated)
 // ============================================================================
@@ -339,11 +344,11 @@ export async function executeCode(code: string): Promise<{ result: ExecuteResult
  */
 export async function getDiagnostics(code: string): Promise<{ diagnostics: LuauDiagnostic[]; elapsed: number }> {
   try {
-    const allFiles = getAllFiles();
-    await sendAnalysisRequest('registerSources', { sources: allFiles });
+    await syncAnalysisSources();
     
     const response = await sendAnalysisRequest('getDiagnostics', { code });
-    return { diagnostics: response.result.diagnostics, elapsed: response.elapsed };
+    const diagnostics = response.result.diagnostics.filter((diag) => !diag.moduleName || diag.moduleName === 'main');
+    return { diagnostics, elapsed: response.elapsed };
   } catch (error) {
     console.error('[Luau] Diagnostics error:', error);
     return { diagnostics: [], elapsed: 0 };
@@ -355,6 +360,7 @@ export async function getDiagnostics(code: string): Promise<{ diagnostics: LuauD
  */
 export async function getAutocomplete(code: string, line: number, col: number): Promise<LuauCompletion[]> {
   try {
+    await syncAnalysisSources();
     const response = await sendAnalysisRequest('autocomplete', { code, line, col });
     return response.result.items;
   } catch (error) {
@@ -368,6 +374,7 @@ export async function getAutocomplete(code: string, line: number, col: number): 
  */
 export async function getHover(code: string, line: number, col: number): Promise<string | null> {
   try {
+    await syncAnalysisSources();
     const response = await sendAnalysisRequest('hover', { code, line, col });
     return response.result.content;
   } catch (error) {
@@ -381,6 +388,7 @@ export async function getHover(code: string, line: number, col: number): Promise
  */
 export async function getAvailableModules(): Promise<string[]> {
   try {
+    await syncAnalysisSources();
     const response = await sendAnalysisRequest('getModules', {});
     return response.result.modules;
   } catch (error) {

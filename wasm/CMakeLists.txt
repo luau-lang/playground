@@ -35,6 +35,7 @@ file(GLOB LUAU_COMPILER_SOURCES "${LUAU_SOURCE_DIR}/Compiler/src/*.cpp")
 file(GLOB LUAU_CONFIG_SOURCES "${LUAU_SOURCE_DIR}/Config/src/*.cpp")
 file(GLOB LUAU_ANALYSIS_SOURCES "${LUAU_SOURCE_DIR}/Analysis/src/*.cpp")
 file(GLOB LUAU_VM_SOURCES "${LUAU_SOURCE_DIR}/VM/src/*.cpp")
+file(GLOB LUAU_REQUIRE_SOURCES "${LUAU_SOURCE_DIR}/Require/src/*.cpp")
 
 # CodeGen sources - only include files needed for assembly TEXT generation
 # Exclude files that require native JIT features (memory allocation, cache flush, etc.)
@@ -107,6 +108,11 @@ target_compile_features(Luau.Analysis PUBLIC cxx_std_17)
 target_include_directories(Luau.Analysis PUBLIC "${LUAU_SOURCE_DIR}/Analysis/include")
 target_link_libraries(Luau.Analysis PUBLIC Luau.Ast Luau.Config Luau.Compiler Luau.VM)
 
+add_library(Luau.Require STATIC ${LUAU_REQUIRE_SOURCES})
+target_compile_features(Luau.Require PUBLIC cxx_std_17)
+target_include_directories(Luau.Require PUBLIC "${LUAU_SOURCE_DIR}/Require/include")
+target_link_libraries(Luau.Require PUBLIC Luau.Common Luau.Config Luau.VM)
+
 add_library(Luau.CodeGen STATIC ${LUAU_CODEGEN_SOURCES})
 target_compile_features(Luau.CodeGen PUBLIC cxx_std_17)
 target_include_directories(Luau.CodeGen PUBLIC "${LUAU_SOURCE_DIR}/CodeGen/include")
@@ -128,6 +134,7 @@ target_include_directories(luau_playground PRIVATE
     ${LUAU_SOURCE_DIR}/Common/include
     ${LUAU_SOURCE_DIR}/VM/include
     ${LUAU_SOURCE_DIR}/CodeGen/include
+    ${LUAU_SOURCE_DIR}/Require/include
 )
 
 target_link_libraries(luau_playground PRIVATE
@@ -137,6 +144,7 @@ target_link_libraries(luau_playground PRIVATE
     Luau.VM
     Luau.Ast
     Luau.Common
+    Luau.Require
     Luau.CodeGen
 )
 
@@ -157,6 +165,7 @@ target_compile_options(Luau.Config PRIVATE ${LUAU_COMPILE_OPTIONS})
 target_compile_options(Luau.VM PRIVATE ${LUAU_COMPILE_OPTIONS})
 target_compile_options(Luau.Ast PRIVATE ${LUAU_COMPILE_OPTIONS})
 target_compile_options(Luau.Common PRIVATE ${LUAU_COMPILE_OPTIONS})
+target_compile_options(Luau.Require PRIVATE ${LUAU_COMPILE_OPTIONS})
 target_compile_options(Luau.CodeGen PRIVATE ${LUAU_COMPILE_OPTIONS})
 
 # Emscripten-specific settings
@@ -189,7 +198,7 @@ if(EMSCRIPTEN)
         -sMAX_WEBGL_VERSION=0
         
         # Exported functions - includes BOTH execution and analysis
-        "-sEXPORTED_FUNCTIONS=['_malloc','_free','_luau_execute','_luau_add_module','_luau_clear_modules','_luau_get_modules','_luau_set_source','_luau_get_diagnostics','_luau_autocomplete','_luau_hover','_luau_signature_help','_luau_dump_bytecode']"
+        "-sEXPORTED_FUNCTIONS=['_malloc','_free','_luau_execute','_luau_add_module','_luau_clear_modules','_luau_get_modules','_luau_set_source','_luau_clear_sources','_luau_get_diagnostics','_luau_autocomplete','_luau_hover','_luau_signature_help','_luau_dump_bytecode']"
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue','setValue']"
         
         # Optimization
@@ -217,4 +226,3 @@ if(EMSCRIPTEN)
         )
     endif()
 endif()
-

@@ -7,6 +7,7 @@ import type { LuauValue } from '$lib/utils/output';
 export interface LuauDiagnostic {
   severity: 'error' | 'warning' | 'info';
   message: string;
+  moduleName?: string;
   startLine: number;
   startCol: number;
   endLine: number;
@@ -60,6 +61,7 @@ export interface LuauWasmModule {
   ccall(name: 'luau_clear_modules', returnType: null, argTypes: [], args: []): void;
   ccall(name: 'luau_get_modules', returnType: 'string', argTypes: [], args: []): string;
   ccall(name: 'luau_set_source', returnType: null, argTypes: ['string', 'string'], args: [string, string]): void;
+  ccall(name: 'luau_clear_sources', returnType: null, argTypes: [], args: []): void;
   
   // Analysis
   ccall(name: 'luau_get_diagnostics', returnType: 'string', argTypes: ['string'], args: [string]): string;
@@ -96,4 +98,3 @@ declare global {
     createLuauModule?: CreateLuauModule;
   }
 }
-

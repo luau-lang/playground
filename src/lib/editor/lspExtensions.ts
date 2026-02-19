@@ -12,8 +12,10 @@ import type { Diagnostic } from '@codemirror/lint';
 import { autocompletion, startCompletion, type CompletionContext } from '@codemirror/autocomplete';
 import type { CompletionResult, Completion } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
-import { getDiagnostics, getAutocomplete, getHover, getAvailableModules, type LuauDiagnostic, type LuauCompletion } from '$lib/luau/wasm';
+import { getDiagnostics, getAutocomplete, getHover, getAvailableModules, type LuauCompletion } from '$lib/luau/wasm';
 import { highlightLuauHtml } from './textmate';
+import { activeFile } from '$lib/stores/playground';
+import { get } from 'svelte/store';
 
 // ============================================================================
 // Diagnostics (Linter)
@@ -28,22 +30,28 @@ function createLuauLinter() {
     
     try {
       const { diagnostics: luauDiagnostics } = await getDiagnostics(code);
-      
-      return luauDiagnostics.map((d: LuauDiagnostic) => {
-        // Convert line/column to document positions
-        const startLine = view.state.doc.line(d.startLine + 1);
-        const endLine = view.state.doc.line(d.endLine + 1);
-        
-        const from = startLine.from + Math.min(d.startCol, startLine.length);
-        const to = endLine.from + Math.min(d.endCol, endLine.length);
-        
-        return {
+
+      const lineCount = view.state.doc.lines;
+      const diagnostics: Diagnostic[] = [];
+
+      for (const d of luauDiagnostics) {
+        const startLineNumber = Math.min(Math.max(d.startLine + 1, 1), lineCount);
+        const endLineNumber = Math.min(Math.max(d.endLine + 1, 1), lineCount);
+        const startLine = view.state.doc.line(startLineNumber);
+        const endLine = view.state.doc.line(endLineNumber);
+
+        const from = startLine.from + Math.min(Math.max(d.startCol, 0), startLine.length);
+        const to = endLine.from + Math.min(Math.max(d.endCol, 0), endLine.length);
+
+        diagnostics.push({
           from: Math.max(0, from),
           to: Math.max(from, to),
           severity: d.severity === 'error' ? 'error' : d.severity === 'warning' ? 'warning' : 'info',
           message: d.message,
-        };
-      });
+        });
+      }
+
+      return diagnostics;
     } catch (error) {
       console.error('[Luau Linter] Error:', error);
       return [];
@@ -73,6 +81,68 @@ function mapCompletionKind(kind: LuauCompletion['kind']): string {
   }
 }
 
+function toRequirePathCompletions(modules: string[], currentFile: string): string[] {
+  type VariantInfo = { exact: boolean; luau: boolean; lua: boolean };
+  const variants = new Map<string, VariantInfo>();
+  const currentBase = currentFile.replace(/\.(luau|lua)$/, '');
+
+  const ensure = (base: string): VariantInfo => {
+    const existing = variants.get(base);
+    if (existing) return existing;
+    const created: VariantInfo = { exact: false, luau: false, lua: false };
+    variants.set(base, created);
+    return created;
+  };
+
+  for (const mod of modules) {
+    if (!mod || mod === 'main' || mod === 'main.luau' || mod.includes('/')) continue;
+    if (mod === currentFile) continue;
+    if (mod.replace(/\.(luau|lua)$/, '') === currentBase) continue;
+
+    if (mod.endsWith('.luau')) {
+      ensure(mod.slice(0, -5)).luau = true;
+    } else if (mod.endsWith('.lua')) {
+      ensure(mod.slice(0, -4)).lua = true;
+    } else {
+      ensure(mod).exact = true;
+    }
+  }
+
+  const completions: string[] = [];
+  for (const [base, info] of variants) {
+    const count = Number(info.exact) + Number(info.luau) + Number(info.lua);
+
+    // Prefer extensionless ./path only when it resolves unambiguously.
+    if (count === 1) {
+      completions.push(`./${base}`);
+      continue;
+    }
+
+    if (info.exact) completions.push(`./${base}`);
+    if (info.luau) completions.push(`./${base}.luau`);
+    if (info.lua) completions.push(`./${base}.lua`);
+  }
+
+  return completions.sort((a, b) => a.localeCompare(b));
+}
+
+function getRequireStringBounds(lineText: string, colInLine: number): { from: number; to: number } | null {
+  const requireMatch = lineText.match(/require\s*\(\s*(["'])([^"']*)/);
+  if (!requireMatch) return null;
+
+  const quoteChar = requireMatch[1];
+  const quoteStart = lineText.indexOf(quoteChar, lineText.indexOf('require'));
+  const afterQuote = quoteStart + 1;
+  if (colInLine < afterQuote) return null;
+
+  const restOfLine = lineText.substring(afterQuote);
+  const closingQuoteIdx = restOfLine.indexOf(quoteChar);
+  const closePos = closingQuoteIdx >= 0 ? afterQuote + closingQuoteIdx : lineText.length;
+  if (colInLine > closePos) return null;
+
+  return { from: afterQuote, to: closePos };
+}
+
 /**
  * Check if we're inside a require string and provide module completions.
  */
@@ -81,50 +151,30 @@ async function requireCompletionSource(context: CompletionContext): Promise<Comp
   const line = context.state.doc.lineAt(context.pos);
   const lineText = line.text;
   const colInLine = context.pos - line.from;
-  
-  // Match require("...) or require('...) where cursor is inside the quotes
-  const requireMatch = lineText.match(/require\s*\(\s*(["'])([^"']*)/);
-  if (!requireMatch) {
-    return null;
-  }
-  
-  const quoteChar = requireMatch[1];
-  const quoteStart = lineText.indexOf(quoteChar, lineText.indexOf('require'));
-  const afterQuote = quoteStart + 1;
-  
-  // Check if cursor is after the opening quote
-  if (colInLine <= afterQuote) {
-    return null;
-  }
-  
-  // Find the closing quote (if any)
-  const restOfLine = lineText.substring(afterQuote);
-  const closingQuoteIdx = restOfLine.indexOf(quoteChar);
-  const closePos = closingQuoteIdx >= 0 ? afterQuote + closingQuoteIdx : lineText.length;
-  
-  // Check if cursor is before the closing quote
-  if (colInLine > closePos) {
+  const bounds = getRequireStringBounds(lineText, colInLine);
+  if (!bounds) {
     return null;
   }
   
   // We're inside a require string! Get available modules
   try {
     const modules = await getAvailableModules();
-    
-    if (modules.length === 0) {
+    const requirePaths = toRequirePathCompletions(modules, get(activeFile));
+
+    if (requirePaths.length === 0) {
       return null;
     }
-    
-    const completions: Completion[] = modules.map((mod) => ({
-      label: mod,
+
+    const options = requirePaths.map((path) => ({
+      label: path,
       type: 'namespace',
       detail: 'module',
     }));
     
     return {
-      from: line.from + afterQuote,
-      to: line.from + closePos,
-      options: completions,
+      from: line.from + bounds.from,
+      to: line.from + bounds.to,
+      options,
       validFor: /^[^"']*$/,
     };
   } catch (error) {
@@ -201,16 +251,26 @@ async function luauCompletionSource(context: CompletionContext): Promise<Complet
  * Create an autocomplete extension.
  */
 function createLuauAutocomplete(): Extension[] {
-  // Plugin to trigger completions after . and :
+  // Plugin to trigger completions after ./: and while typing inside require("...").
   const triggerOnAccessor = ViewPlugin.fromClass(class {
     constructor(readonly view: EditorView) {}
   }, {
     eventHandlers: {
       keyup: (event, view) => {
-        // Trigger completion after typing . or :
         if (event.key === '.' || event.key === ':') {
           // Small delay to let the character be inserted first
           setTimeout(() => startCompletion(view), 10);
+          return;
+        }
+
+        // Trigger completion as soon as require string editing starts/continues.
+        if (event.key === '"' || event.key === "'" || event.key === 'Backspace' || event.key.length === 1) {
+          const head = view.state.selection.main.head;
+          const line = view.state.doc.lineAt(head);
+          const colInLine = head - line.from;
+          if (getRequireStringBounds(line.text, colInLine)) {
+            setTimeout(() => startCompletion(view), 10);
+          }
         }
       }
     }
@@ -334,4 +394,3 @@ export function luauLspExtensions(): Extension[] {
 
 // Export individual extensions for flexibility
 export { createLuauLinter, createLuauAutocomplete, createLuauHover };
-
