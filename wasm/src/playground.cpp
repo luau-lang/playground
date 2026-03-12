@@ -7,6 +7,7 @@
  */
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <sstream>
 #include <memory>
@@ -14,6 +15,7 @@
 #include <unordered_map>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 
 // Luau headers
 #include "Luau/Ast.h"
@@ -1045,6 +1047,59 @@ static std::unique_ptr<Luau::Frontend> g_frontend;
 static Luau::Mode g_mode = Luau::Mode::Nonstrict;
 static bool g_useNewSolver = true;
 
+static std::unordered_map<std::string, std::string> parseSerializedFastFlags(std::string_view serializedFlags) {
+    std::unordered_map<std::string, std::string> fastFlags;
+
+    while (!serializedFlags.empty()) {
+        size_t newline = serializedFlags.find('\n');
+        std::string_view line = newline == std::string_view::npos
+            ? serializedFlags
+            : serializedFlags.substr(0, newline);
+
+        if (size_t separator = line.find('='); separator != std::string_view::npos) {
+            fastFlags.emplace(
+                std::string(line.substr(0, separator)),
+                std::string(line.substr(separator + 1))
+            );
+        }
+
+        if (newline == std::string_view::npos)
+            break;
+
+        serializedFlags.remove_prefix(newline + 1);
+    }
+
+    return fastFlags;
+}
+
+static void registerFastFlags(std::unordered_map<std::string, std::string>& fastFlags) {
+    for (Luau::FValue<bool>* flag = Luau::FValue<bool>::list; flag; flag = flag->next) {
+        auto it = fastFlags.find(flag->name);
+        if (it == fastFlags.end())
+            continue;
+
+        if (it->second == "True")
+            flag->value = true;
+        else if (it->second == "False")
+            flag->value = false;
+
+        fastFlags.erase(it);
+    }
+
+    for (Luau::FValue<int>* flag = Luau::FValue<int>::list; flag; flag = flag->next) {
+        auto it = fastFlags.find(flag->name);
+        if (it == fastFlags.end())
+            continue;
+
+        try {
+            flag->value = std::stoi(it->second);
+        } catch (...) {
+        }
+
+        fastFlags.erase(it);
+    }
+}
+
 static void ensureAnalysisInit() {
     if (g_frontend) return;
     
@@ -1141,6 +1196,17 @@ EXPORT void luau_set_solver(bool useNew) {
             }
         }
     }
+}
+
+/**
+ * Apply Luau fast flags/ints serialized as newline-delimited "Name=Value" entries.
+ */
+EXPORT void luau_set_fflags(const char* serializedFlags) {
+    if (!serializedFlags || !*serializedFlags)
+        return;
+
+    auto fastFlags = parseSerializedFastFlags(serializedFlags);
+    registerFastFlags(fastFlags);
 }
 
 /**

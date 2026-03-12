@@ -31,6 +31,7 @@ export type WorkerRequest =
   | { type: 'getModules' }
   | { type: 'setMode'; mode: number }
   | { type: 'setSolver'; isNew: boolean }
+  | { type: 'setFFlags'; serializedFlags: string }
   | { type: 'getBytecode'; code: string; optimizationLevel: number; debugLevel: number; outputFormat: number; showRemarks: boolean }
   | { type: 'registerModules'; modules: Record<string, string> }
   | { type: 'registerSources'; sources: Record<string, string> };
@@ -44,6 +45,7 @@ export type WorkerResponse =
   | { type: 'getModules'; result: { modules: string[] } }
   | { type: 'setMode'; success: boolean }
   | { type: 'setSolver'; success: boolean }
+  | { type: 'setFFlags'; success: boolean }
   | { type: 'getBytecode'; result: { success: boolean; bytecode: string; error?: string } }
   | { type: 'registerModules'; success: boolean }
   | { type: 'registerSources'; success: boolean }
@@ -176,6 +178,13 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
         const module = await loadModule();
         module.ccall('luau_set_solver', null, ['boolean'], [request.isNew]);
         respond(requestId, { type: 'setSolver', success: true });
+        break;
+      }
+
+      case 'setFFlags': {
+        const module = await loadModule();
+        module.ccall('luau_set_fflags', null, ['string'], [request.serializedFlags]);
+        respond(requestId, { type: 'setFFlags', success: true });
         break;
       }
       
