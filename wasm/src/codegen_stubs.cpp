@@ -11,6 +11,7 @@ LUAU_FASTFLAGVARIABLE(DebugCodegenOptSize)
 LUAU_FASTINTVARIABLE(CodegenHeuristicsInstructionLimit, 25000)
 LUAU_FASTINTVARIABLE(CodegenHeuristicsBlockLimit, 25000)
 LUAU_FASTINTVARIABLE(CodegenHeuristicsBlockInstructionLimit, 25000)
+LUAU_FASTFLAGVARIABLE(LuauCodegenCounterSupport)
 
 namespace Luau
 {
