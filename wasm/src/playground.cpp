@@ -537,18 +537,55 @@ static int requireLoad(lua_State* L, void* ctx, const char* path, const char* ch
 
     size_t bytecodeSize = 0;
     char* bytecode = luau_compile(source.c_str(), source.size(), nullptr, &bytecodeSize);
-    if (!bytecode)
+    if (!bytecode) {
         luaL_error(L, "failed to compile module '%s'", path ? path : lookup.moduleName.c_str());
-
-    int loadResult = luau_load(L, chunkname, bytecode, bytecodeSize, 0);
-    free(bytecode);
-
-    if (loadResult != 0) {
-        lua_error(L);
         return 0;
     }
 
-    lua_call(L, 0, 1);
+    // Modules run in their own sandboxed thread so globals don't leak
+    // between modules and callers.
+    lua_State* mainThread = lua_mainthread(L);
+    lua_State* moduleThread = lua_newthread(mainThread);
+    luaL_sandboxthread(moduleThread);
+
+    std::string fallbackChunkname = "=" + lookup.moduleName;
+    const char* effectiveChunkname = chunkname ? chunkname : fallbackChunkname.c_str();
+    int loadResult = luau_load(moduleThread, effectiveChunkname, bytecode, bytecodeSize, 0);
+    free(bytecode);
+
+    if (loadResult != 0) {
+        const char* errMsg = lua_tostring(moduleThread, -1);
+        std::string error = errMsg ? errMsg : "failed to load module";
+        lua_pop(mainThread, 1); // pop thread from main stack
+        luaL_error(L, "error loading module '%s': %s", path ? path : lookup.moduleName.c_str(), error.c_str());
+        return 0;
+    }
+
+    // Execute the module in the thread.
+    int callResult = lua_resume(moduleThread, L, 0);
+    if (callResult != 0) {
+        const char* errMsg = lua_tostring(moduleThread, -1);
+        std::string error = errMsg ? errMsg : "unknown module error";
+        lua_pop(mainThread, 1); // pop thread from main stack
+        if (callResult == LUA_YIELD) {
+            luaL_error(L, "module '%s' yielded unexpectedly", path ? path : lookup.moduleName.c_str());
+        } else {
+            luaL_error(L, "error running module '%s': %s", path ? path : lookup.moduleName.c_str(), error.c_str());
+        }
+        return 0;
+    }
+
+    // Return first module result (or nil if nothing was returned),
+    // and remove the thread object from the caller stack.
+    if (lua_gettop(moduleThread) > 0) {
+        // Match lua_call(..., 1) semantics: keep only the first return value.
+        lua_pushvalue(moduleThread, 1);
+        lua_xmove(moduleThread, L, 1);
+    } else {
+        lua_pushnil(L);
+    }
+    lua_pop(mainThread, 1);
+
     return 1;
 }
 
@@ -629,6 +666,9 @@ static void registerPlaygroundGlobals(lua_State* L, PlaygroundRequireContext* re
     
     // Use Luau's upstream require implementation with playground-specific navigation.
     luaopen_require(L, playgroundRequireConfigInit, requireCtx);
+
+    // Mark builtin globals/libraries read-only and enable safeenv.
+    luaL_sandbox(L);
 }
 
 static std::string getCodegenAssembly(
@@ -709,19 +749,24 @@ EXPORT const char* luau_execute(const char* code) {
     g_printCalls.clear();
     
     // Create a new Lua state
-    std::unique_ptr<lua_State, decltype(&lua_close)> L(luaL_newstate(), lua_close);
-    if (!L) {
+    std::unique_ptr<lua_State, decltype(&lua_close)> globalState(luaL_newstate(), lua_close);
+    if (!globalState) {
         return setResult("{\"success\":false,\"output\":\"\",\"prints\":[],\"error\":\"Failed to create Lua state\"}");
     }
-    
     PlaygroundRequireContext requireCtx;
 
-    // Set up sandbox
-    registerPlaygroundGlobals(L.get(), &requireCtx);
+    lua_State* GL = globalState.get();
+
+    // Set up sandboxed globals and require callbacks.
+    registerPlaygroundGlobals(GL, &requireCtx);
+
+    // Execute user code in its own sandboxed script thread.
+    lua_State* scriptThread = lua_newthread(GL);
+    luaL_sandboxthread(scriptThread);
     
     // Push error handler FIRST (so it's at a fixed position)
-    lua_pushcfunction(L.get(), errorHandler, "errorHandler");
-    int errHandlerIdx = lua_gettop(L.get());  // Should be 1
+    lua_pushcfunction(scriptThread, errorHandler, "errorHandler");
+    int errHandlerIdx = lua_gettop(scriptThread);  // Should be 1
     
     // Compile the code
     size_t bytecodeSize = 0;
@@ -732,11 +777,11 @@ EXPORT const char* luau_execute(const char* code) {
     }
     
     // Load the bytecode (function goes on top of error handler)
-    int loadResult = luau_load(L.get(), "=main", bytecode, bytecodeSize, 0);
+    int loadResult = luau_load(scriptThread, "=main", bytecode, bytecodeSize, 0);
     free(bytecode);
     
     if (loadResult != 0) {
-        const char* errMsg = lua_tostring(L.get(), -1);
+        const char* errMsg = lua_tostring(scriptThread, -1);
         std::string error = errMsg ? errMsg : "Failed to load bytecode";
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
@@ -749,7 +794,7 @@ EXPORT const char* luau_execute(const char* code) {
     // Execute with error handler at position 1
     int callResult = 0;
     try {
-        callResult = lua_pcall(L.get(), 0, 0, errHandlerIdx);
+        callResult = lua_pcall(scriptThread, 0, 0, errHandlerIdx);
     } catch (const std::exception& e) {
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
@@ -765,7 +810,7 @@ EXPORT const char* luau_execute(const char* code) {
     }
     
     if (callResult != 0) {
-        const char* errMsg = lua_tostring(L.get(), -1);
+        const char* errMsg = lua_tostring(scriptThread, -1);
         std::string error = errMsg ? errMsg : "Unknown runtime error";
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
