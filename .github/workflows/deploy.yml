@@ -37,6 +37,8 @@ jobs:
             emsdk
             wasm/build
             wasm/luau
+            public/wasm/luau.wasm
+            src/lib/luau/luau-module.js
           key: build-${{ runner.os }}-${{ hashFiles('wasm/src/**', 'wasm/CMakeLists.txt', 'wasm/build.sh') }}-luau-${{ github.run_id }}
           restore-keys: |
             build-${{ runner.os }}-${{ hashFiles('wasm/src/**', 'wasm/CMakeLists.txt', 'wasm/build.sh') }}-luau-
