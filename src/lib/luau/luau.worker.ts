@@ -31,6 +31,7 @@ export type WorkerRequest =
   | { type: 'getModules' }
   | { type: 'setMode'; mode: number }
   | { type: 'setSolver'; isNew: boolean }
+  | { type: 'setFFlags'; serializedFlags: string }
   | { type: 'getBytecode'; code: string; optimizationLevel: number; debugLevel: number; outputFormat: number; showRemarks: boolean }
   | { type: 'registerModules'; modules: Record<string, string> }
   | { type: 'registerSources'; sources: Record<string, string> };
@@ -44,6 +45,7 @@ export type WorkerResponse =
   | { type: 'getModules'; result: { modules: string[] } }
   | { type: 'setMode'; success: boolean }
   | { type: 'setSolver'; success: boolean }
+  | { type: 'setFFlags'; success: boolean }
   | { type: 'getBytecode'; result: { success: boolean; bytecode: string; error?: string } }
   | { type: 'registerModules'; success: boolean }
   | { type: 'registerSources'; success: boolean }
@@ -79,8 +81,7 @@ async function loadModule(): Promise<LuauWasmModule> {
 }
 
 /**
- * Register a file with both its original name and without extension.
- * This allows require("foo") to work for "foo.luau".
+ * Register a file by its exact name.
  */
 function registerFile(
   module: LuauWasmModule,
@@ -88,19 +89,10 @@ function registerFile(
   content: string,
   fn: 'luau_add_module' | 'luau_set_source'
 ): void {
-  // Use type narrowing to satisfy TypeScript's overload resolution
-  const register = (filename: string) => {
-    if (fn === 'luau_add_module') {
-      module.ccall('luau_add_module', null, ['string', 'string'], [filename, content]);
-    } else {
-      module.ccall('luau_set_source', null, ['string', 'string'], [filename, content]);
-    }
-  };
-
-  register(name);
-  const nameWithoutExt = name.replace(/\.(luau|lua)$/, '');
-  if (nameWithoutExt !== name) {
-    register(nameWithoutExt);
+  if (fn === 'luau_add_module') {
+    module.ccall('luau_add_module', null, ['string', 'string'], [name, content]);
+  } else {
+    module.ccall('luau_set_source', null, ['string', 'string'], [name, content]);
   }
 }
 
@@ -188,6 +180,13 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
         respond(requestId, { type: 'setSolver', success: true });
         break;
       }
+
+      case 'setFFlags': {
+        const module = await loadModule();
+        module.ccall('luau_set_fflags', null, ['string'], [request.serializedFlags]);
+        respond(requestId, { type: 'setFFlags', success: true });
+        break;
+      }
       
       case 'getBytecode': {
         const module = await loadModule();
@@ -216,6 +215,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
       
       case 'registerSources': {
         const module = await loadModule();
+        // Replace the full analysis source set so renames/deletes are reflected.
+        module.ccall('luau_clear_sources', null, [], []);
         for (const [name, content] of Object.entries(request.sources)) {
           registerFile(module, name, content, 'luau_set_source');
         }

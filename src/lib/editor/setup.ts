@@ -16,6 +16,7 @@ import { luauTextMate, initLuauTextMate } from './textmate';
 export { initLuauTextMate };
 import { darkTheme, lightTheme } from './themes';
 import { luauLspExtensions } from './lspExtensions';
+import { luauEnterKeymap, luauIndentation } from './luauBlocks';
 import { forceLinting, lintGutter } from '@codemirror/lint';
 import { themeMode } from '$lib/utils/theme';
 import { cursorLine } from '$lib/stores/playground';
@@ -63,6 +64,7 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     
     // Keymaps
     keymap.of([
+      ...luauEnterKeymap,
       ...closeBracketsKeymap,
       ...defaultKeymap,
       ...searchKeymap,
@@ -72,6 +74,7 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     
     // Luau language + LSP extensions
     luauTextMate(),
+    luauIndentation(),
     ...luauLspExtensions(),
     
     // Theme (dynamic)

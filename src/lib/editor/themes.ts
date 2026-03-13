@@ -57,8 +57,8 @@ const darkColors: ThemeColors = {
   lineNumber: "var(--color-extended-gray-600)",
   lineNumberActive: "var(--color-extended-gray-500)",
   gutterBackground: "var(--editor-surface-0)",
-  matchingBracketBg: "color-mix(in srgb, var(--color-green-400) 20%, transparent)",
-  matchingBracketOutline: "var(--color-green-400)",
+  matchingBracketBg: "color-mix(in srgb, var(--color-green-900) 40%, transparent)",
+  matchingBracketOutline: "color-mix(in srgb, var(--color-green-900) 80%, transparent)",
 
   keyword: "var(--color-blue-500)",
   string: "var(--color-green-400)",
@@ -89,8 +89,8 @@ const lightColors: ThemeColors = {
   lineNumber: "var(--color-extended-gray-600)",
   lineNumberActive: "var(--color-extended-gray-900)",
   gutterBackground: "var(--editor-surface-0)",
-  matchingBracketBg: "color-mix(in srgb, var(--color-green-900) 15%, transparent)",
-  matchingBracketOutline: "var(--color-green-900)",
+  matchingBracketBg: "color-mix(in srgb, var(--color-green-400) 30%, transparent)",
+  matchingBracketOutline: "color-mix(in srgb, var(--color-green-400) 70%, transparent)",
 
   keyword: "var(--color-blue-1000)",
   string: "var(--color-green-900)",
@@ -131,7 +131,8 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
           zIndex: "1",
         },
         ".cm-cursor, .cm-dropCursor": {
-          borderLeftColor: colors.cursor,
+          borderLeft: `2px solid ${colors.cursor}`,
+          marginLeft: "-1px",
         },
         ".cm-scroller": {
           position: "relative",
@@ -166,8 +167,17 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
           padding: "0 16px 0 4px",
         },
         ".cm-matchingBracket": {
-          backgroundColor: colors.matchingBracketBg,
+          backgroundColor: `${colors.matchingBracketBg} !important`,
           outline: `1px solid ${colors.matchingBracketOutline}`,
+        },
+        ".cm-selectionMatch": {
+          backgroundColor: colors.matchingBracketBg,
+        },
+        ".cm-searchMatch": {
+          backgroundColor: colors.matchingBracketBg,
+        },
+        ".cm-searchMatch-selected": {
+          backgroundColor: colors.matchingBracketOutline,
         },
 
         // Tooltip styling
@@ -283,7 +293,7 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
           color: "var(--text-primary)",
         },
       },
-      { dark: isDark }
+      { dark: isDark },
     ),
 
     syntaxHighlighting(
@@ -307,7 +317,7 @@ function createTheme(colors: ThemeColors, isDark: boolean): Extension {
         { tag: tags.operator, color: colors.operator },
         { tag: tags.punctuation, color: colors.punctuation },
         { tag: tags.bracket, color: colors.punctuation },
-      ])
+      ]),
     ),
   ];
 }

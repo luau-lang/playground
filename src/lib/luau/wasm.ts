@@ -22,10 +22,41 @@ declare const __wasmPromises: { luau: Promise<ArrayBuffer> } | undefined;
 // Error messages for termination
 const STOPPED_ERROR = 'Execution stopped';
 const CANCELLED_ERROR = 'Cancelled';
+const ROBLOX_PC_STUDIO_FLAGS_URL = 'https://clientsettingscdn.roblox.com/v1/settings/application?applicationName=PCStudioApp';
+const ROBLOX_FAST_FLAG_KINDS = ['FFlag', 'FInt', 'DFFlag', 'DFInt'] as const;
 
 // Convert LuauMode to numeric value for WASM
 const modeToNum = (mode: LuauMode): number =>
   mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
+
+let robloxStudioFlagPayloadPromise: Promise<string | null> | null = null;
+
+async function getRobloxStudioFlagPayload(): Promise<string | null> {
+  if (!robloxStudioFlagPayloadPromise) {
+    robloxStudioFlagPayloadPromise = fetch(ROBLOX_PC_STUDIO_FLAGS_URL)
+      .then((response) => response.json())
+      .then(({ applicationSettings }: { applicationSettings?: Record<string, string> }) => {
+        const lines: string[] = [];
+
+        for (const [name, value] of Object.entries(applicationSettings ?? {})) {
+          for (const kind of ROBLOX_FAST_FLAG_KINDS) {
+            if (name.startsWith(`${kind}Luau`)) {
+              lines.push(`${name.slice(kind.length)}=${value}`);
+              break;
+            }
+          }
+        }
+
+        return lines.length > 0 ? lines.join('\n') : null;
+      })
+      .catch((error) => {
+        console.warn('[Luau] Failed to sync Roblox Studio Luau flags:', error);
+        return null;
+      });
+  }
+
+  return robloxStudioFlagPayloadPromise;
+}
 
 // Compiled WASM module - shared with workers to avoid recompilation
 // WebAssembly.Module is structured-clonable, so workers get the same compiled code
@@ -240,8 +271,15 @@ async function loadWorker(
 const analysis = createWorkerManager();
 
 async function loadAnalysisWorker(): Promise<void> {
+  const robloxStudioFlagsPromise = getRobloxStudioFlagPayload();
+
   return loadWorker(analysis, 'Analysis', {
     postInit: async () => {
+      const robloxStudioFlags = await robloxStudioFlagsPromise;
+      if (robloxStudioFlags) {
+        await sendToWorker(analysis, 'setFFlags', { serializedFlags: robloxStudioFlags });
+      }
+
       const currentSettings = get(settings);
       await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });
       await sendToWorker(analysis, 'setSolver', { isNew: currentSettings.solver === 'new' });
@@ -258,6 +296,11 @@ async function sendAnalysisRequest<K extends WorkerRequest['type']>(
   return sendToWorker(analysis, type, params);
 }
 
+async function syncAnalysisSources(): Promise<void> {
+  const allFiles = getAllFiles();
+  await sendAnalysisRequest('registerSources', { sources: allFiles });
+}
+
 // ============================================================================
 // Execution Worker - On-demand for code execution (can be terminated)
 // ============================================================================
@@ -265,9 +308,16 @@ async function sendAnalysisRequest<K extends WorkerRequest['type']>(
 const execution = createWorkerManager();
 
 async function loadExecutionWorker(): Promise<void> {
+  const robloxStudioFlagsPromise = getRobloxStudioFlagPayload();
+
   return loadWorker(execution, 'Execution', {
     checkTerminated: true,
     postInit: async () => {
+      const robloxStudioFlags = await robloxStudioFlagsPromise;
+      if (robloxStudioFlags) {
+        await sendToWorker(execution, 'setFFlags', { serializedFlags: robloxStudioFlags });
+      }
+
       const currentSettings = get(settings);
       await sendToWorker(execution, 'setMode', { mode: modeToNum(currentSettings.mode) });
     }
@@ -339,11 +389,11 @@ export async function executeCode(code: string): Promise<{ result: ExecuteResult
  */
 export async function getDiagnostics(code: string): Promise<{ diagnostics: LuauDiagnostic[]; elapsed: number }> {
   try {
-    const allFiles = getAllFiles();
-    await sendAnalysisRequest('registerSources', { sources: allFiles });
+    await syncAnalysisSources();
     
     const response = await sendAnalysisRequest('getDiagnostics', { code });
-    return { diagnostics: response.result.diagnostics, elapsed: response.elapsed };
+    const diagnostics = response.result.diagnostics.filter((diag) => !diag.moduleName || diag.moduleName === 'main');
+    return { diagnostics, elapsed: response.elapsed };
   } catch (error) {
     console.error('[Luau] Diagnostics error:', error);
     return { diagnostics: [], elapsed: 0 };
@@ -355,6 +405,7 @@ export async function getDiagnostics(code: string): Promise<{ diagnostics: LuauD
  */
 export async function getAutocomplete(code: string, line: number, col: number): Promise<LuauCompletion[]> {
   try {
+    await syncAnalysisSources();
     const response = await sendAnalysisRequest('autocomplete', { code, line, col });
     return response.result.items;
   } catch (error) {
@@ -368,6 +419,7 @@ export async function getAutocomplete(code: string, line: number, col: number): 
  */
 export async function getHover(code: string, line: number, col: number): Promise<string | null> {
   try {
+    await syncAnalysisSources();
     const response = await sendAnalysisRequest('hover', { code, line, col });
     return response.result.content;
   } catch (error) {
@@ -381,6 +433,7 @@ export async function getHover(code: string, line: number, col: number): Promise
  */
 export async function getAvailableModules(): Promise<string[]> {
   try {
+    await syncAnalysisSources();
     const response = await sendAnalysisRequest('getModules', {});
     return response.result.modules;
   } catch (error) {

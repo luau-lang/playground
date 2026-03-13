@@ -7,12 +7,15 @@
  */
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <sstream>
 #include <memory>
 #include <optional>
 #include <unordered_map>
 #include <cmath>
+#include <cstring>
+#include <cstdlib>
 
 // Luau headers
 #include "Luau/Ast.h"
@@ -29,13 +32,13 @@
 #include "Luau/Module.h"
 #include "Luau/ModuleResolver.h"
 #include "Luau/Parser.h"
+#include "Luau/Require.h"
 #include "Luau/Scope.h"
 #include "Luau/ToString.h"
 #include "Luau/TypeInfer.h"
 
 // Feature flags for new solver
 LUAU_FASTFLAG(LuauSolverV2)
-LUAU_FASTFLAG(LuauUseWorkspacePropToChooseSolver)
 
 // Luau VM headers
 #include "lua.h"
@@ -312,7 +315,7 @@ static int playgroundPrint(lua_State* L) {
     return 0;
 }
 
-// Normalize a module path by removing ./ prefix and handling extensions
+// Normalize module names for the flat playground filesystem.
 static std::string normalizeModulePath(const std::string& path) {
     std::string result = path;
     
@@ -329,82 +332,282 @@ static std::string normalizeModulePath(const std::string& path) {
     return result;
 }
 
-// Try to find a module with various path variations
-static std::unordered_map<std::string, std::string>::iterator findModule(const std::string& moduleName) {
-    std::string normalized = normalizeModulePath(moduleName);
-    
-    // Try exact match first
-    auto it = g_modules.find(normalized);
-    if (it != g_modules.end()) return it;
-    
-    // Try with .luau extension
-    it = g_modules.find(normalized + ".luau");
-    if (it != g_modules.end()) return it;
-    
-    // Try with .lua extension
-    it = g_modules.find(normalized + ".lua");
-    if (it != g_modules.end()) return it;
-    
-    // Try without extension if it has one
-    size_t dotPos = normalized.rfind('.');
-    if (dotPos != std::string::npos) {
-        std::string withoutExt = normalized.substr(0, dotPos);
-        it = g_modules.find(withoutExt);
-        if (it != g_modules.end()) return it;
-        
-        it = g_modules.find(withoutExt + ".luau");
-        if (it != g_modules.end()) return it;
-        
-        it = g_modules.find(withoutExt + ".lua");
-        if (it != g_modules.end()) return it;
-    }
-    
-    return g_modules.end();
+struct PlaygroundRequireContext {
+    std::string currentModule;
+};
+
+enum class ModuleLookupStatus {
+    Found,
+    NotFound,
+    Ambiguous,
+};
+
+struct ModuleLookupResult {
+    ModuleLookupStatus status;
+    std::string moduleName;
+};
+
+static bool hasExplicitModuleExtension(const std::string& path) {
+    return path.size() >= 5 && path.compare(path.size() - 5, 5, ".luau") == 0 ||
+           path.size() >= 4 && path.compare(path.size() - 4, 4, ".lua") == 0;
 }
 
-// Custom require function that loads from g_modules
-static int playgroundRequire(lua_State* L) {
-    const char* moduleName = luaL_checkstring(L, 1);
-    
-    // Find the module with path normalization
-    auto it = findModule(moduleName);
-    
-    if (it == g_modules.end()) {
-        // List available modules for debugging
-        std::string available;
-        for (const auto& [name, _] : g_modules) {
-            if (!available.empty()) available += ", ";
-            available += "'" + name + "'";
-        }
-        luaL_error(L, "module '%s' not found\navailable modules: %s", moduleName, available.c_str());
-        return 0;
+// Resolve a module path in a flat filesystem (no directories, no aliases).
+static ModuleLookupResult findFlatModule(const std::string& moduleName) {
+    std::string normalized = normalizeModulePath(moduleName);
+    if (normalized.empty())
+        return {ModuleLookupStatus::NotFound, ""};
+
+    // Flat filesystem: slash-separated module names are unsupported.
+    if (normalized.find('/') != std::string::npos)
+        return {ModuleLookupStatus::NotFound, ""};
+
+    const bool hasExact = g_modules.find(normalized) != g_modules.end();
+
+    if (hasExplicitModuleExtension(normalized))
+        return hasExact ? ModuleLookupResult{ModuleLookupStatus::Found, normalized}
+                        : ModuleLookupResult{ModuleLookupStatus::NotFound, ""};
+
+    const bool hasLuau = g_modules.find(normalized + ".luau") != g_modules.end();
+    const bool hasLua = g_modules.find(normalized + ".lua") != g_modules.end();
+
+    int matches = 0;
+    std::string winner;
+    auto record = [&](const std::string& candidate) {
+        matches++;
+        winner = candidate;
+    };
+
+    if (hasExact)
+        record(normalized);
+    if (hasLuau)
+        record(normalized + ".luau");
+    if (hasLua)
+        record(normalized + ".lua");
+
+    if (matches == 0)
+        return {ModuleLookupStatus::NotFound, ""};
+    if (matches > 1)
+        return {ModuleLookupStatus::Ambiguous, ""};
+
+    return {ModuleLookupStatus::Found, winner};
+}
+
+static luarequire_WriteResult writeRequireString(const std::string& value, char* buffer, size_t bufferSize, size_t* sizeOut) {
+    size_t nullTerminatedSize = value.size() + 1;
+    if (bufferSize < nullTerminatedSize) {
+        *sizeOut = nullTerminatedSize;
+        return WRITE_BUFFER_TOO_SMALL;
     }
-    
+
+    *sizeOut = nullTerminatedSize;
+    memcpy(buffer, value.c_str(), nullTerminatedSize);
+    return WRITE_SUCCESS;
+}
+
+static bool requireIsAllowed(lua_State* L, void* ctx, const char* requirerChunkname) {
+    (void)L;
+    (void)ctx;
+
+    return requirerChunkname && requirerChunkname[0] == '=';
+}
+
+static luarequire_NavigateResult requireReset(lua_State* L, void* ctx, const char* requirerChunkname) {
+    (void)L;
+
+    auto* requireCtx = static_cast<PlaygroundRequireContext*>(ctx);
+    if (!requireCtx || !requirerChunkname || requirerChunkname[0] != '=')
+        return NAVIGATE_NOT_FOUND;
+
+    requireCtx->currentModule = normalizeModulePath(requirerChunkname + 1);
+    return requireCtx->currentModule.empty() ? NAVIGATE_NOT_FOUND : NAVIGATE_SUCCESS;
+}
+
+static luarequire_NavigateResult requireJumpToAlias(lua_State* L, void* ctx, const char* path) {
+    (void)L;
+    (void)ctx;
+    (void)path;
+    return NAVIGATE_NOT_FOUND;
+}
+
+static luarequire_NavigateResult requireToParent(lua_State* L, void* ctx) {
+    (void)L;
+
+    auto* requireCtx = static_cast<PlaygroundRequireContext*>(ctx);
+    if (!requireCtx || requireCtx->currentModule.empty())
+        return NAVIGATE_NOT_FOUND;
+
+    requireCtx->currentModule.clear();
+    return NAVIGATE_SUCCESS;
+}
+
+static luarequire_NavigateResult requireToChild(lua_State* L, void* ctx, const char* name) {
+    (void)L;
+
+    auto* requireCtx = static_cast<PlaygroundRequireContext*>(ctx);
+    if (!requireCtx || !name || !*name)
+        return NAVIGATE_NOT_FOUND;
+
+    // Flat filesystem: navigating "down" from a file implies directories, which are unsupported.
+    if (!requireCtx->currentModule.empty())
+        return NAVIGATE_NOT_FOUND;
+
+    ModuleLookupResult lookup = findFlatModule(name);
+    if (lookup.status == ModuleLookupStatus::Ambiguous)
+        return NAVIGATE_AMBIGUOUS;
+    if (lookup.status != ModuleLookupStatus::Found)
+        return NAVIGATE_NOT_FOUND;
+
+    requireCtx->currentModule = std::move(lookup.moduleName);
+    return NAVIGATE_SUCCESS;
+}
+
+static bool requireIsModulePresent(lua_State* L, void* ctx) {
+    (void)L;
+
+    auto* requireCtx = static_cast<PlaygroundRequireContext*>(ctx);
+    if (!requireCtx)
+        return false;
+
+    ModuleLookupResult lookup = findFlatModule(requireCtx->currentModule);
+    return lookup.status == ModuleLookupStatus::Found;
+}
+
+static luarequire_WriteResult requireGetChunkname(lua_State* L, void* ctx, char* buffer, size_t bufferSize, size_t* sizeOut) {
+    (void)L;
+
+    auto* requireCtx = static_cast<PlaygroundRequireContext*>(ctx);
+    if (!requireCtx)
+        return WRITE_FAILURE;
+
+    ModuleLookupResult lookup = findFlatModule(requireCtx->currentModule);
+    if (lookup.status != ModuleLookupStatus::Found)
+        return WRITE_FAILURE;
+
+    return writeRequireString("=" + lookup.moduleName, buffer, bufferSize, sizeOut);
+}
+
+static luarequire_WriteResult requireGetLoadname(lua_State* L, void* ctx, char* buffer, size_t bufferSize, size_t* sizeOut) {
+    (void)L;
+
+    auto* requireCtx = static_cast<PlaygroundRequireContext*>(ctx);
+    if (!requireCtx)
+        return WRITE_FAILURE;
+
+    ModuleLookupResult lookup = findFlatModule(requireCtx->currentModule);
+    if (lookup.status != ModuleLookupStatus::Found)
+        return WRITE_FAILURE;
+
+    return writeRequireString(lookup.moduleName, buffer, bufferSize, sizeOut);
+}
+
+static luarequire_WriteResult requireGetCacheKey(lua_State* L, void* ctx, char* buffer, size_t bufferSize, size_t* sizeOut) {
+    return requireGetLoadname(L, ctx, buffer, bufferSize, sizeOut);
+}
+
+static luarequire_ConfigStatus requireGetConfigStatus(lua_State* L, void* ctx) {
+    (void)L;
+    (void)ctx;
+    return CONFIG_ABSENT;
+}
+
+static luarequire_WriteResult requireGetAlias(lua_State* L, void* ctx, const char* alias, char* buffer, size_t bufferSize, size_t* sizeOut) {
+    (void)L;
+    (void)ctx;
+    (void)alias;
+    (void)buffer;
+    (void)bufferSize;
+    (void)sizeOut;
+    return WRITE_FAILURE;
+}
+
+static int requireLoad(lua_State* L, void* ctx, const char* path, const char* chunkname, const char* loadname) {
+    (void)ctx;
+
+    const std::string requested = loadname ? loadname : (path ? path : "");
+    ModuleLookupResult lookup = findFlatModule(requested);
+    if (lookup.status == ModuleLookupStatus::Ambiguous)
+        luaL_error(L, "module '%s' is ambiguous", path ? path : requested.c_str());
+    if (lookup.status != ModuleLookupStatus::Found)
+        luaL_error(L, "module '%s' not found", path ? path : "<unknown>");
+
+    auto it = g_modules.find(lookup.moduleName);
+    if (it == g_modules.end())
+        luaL_error(L, "module '%s' not found", path ? path : "<unknown>");
+
     const std::string& source = it->second;
-    
-    // Compile the module
+
     size_t bytecodeSize = 0;
     char* bytecode = luau_compile(source.c_str(), source.size(), nullptr, &bytecodeSize);
-    
     if (!bytecode) {
-        luaL_error(L, "failed to compile module '%s'", moduleName);
+        luaL_error(L, "failed to compile module '%s'", path ? path : lookup.moduleName.c_str());
         return 0;
     }
-    
-    // Load and execute the module
-    std::string chunkName = std::string("=") + moduleName;
-    int loadResult = luau_load(L, chunkName.c_str(), bytecode, bytecodeSize, 0);
+
+    // Modules run in their own sandboxed thread so globals don't leak
+    // between modules and callers.
+    lua_State* mainThread = lua_mainthread(L);
+    lua_State* moduleThread = lua_newthread(mainThread);
+    luaL_sandboxthread(moduleThread);
+
+    std::string fallbackChunkname = "=" + lookup.moduleName;
+    const char* effectiveChunkname = chunkname ? chunkname : fallbackChunkname.c_str();
+    int loadResult = luau_load(moduleThread, effectiveChunkname, bytecode, bytecodeSize, 0);
     free(bytecode);
-    
+
     if (loadResult != 0) {
-        lua_error(L);
+        const char* errMsg = lua_tostring(moduleThread, -1);
+        std::string error = errMsg ? errMsg : "failed to load module";
+        lua_pop(mainThread, 1); // pop thread from main stack
+        luaL_error(L, "error loading module '%s': %s", path ? path : lookup.moduleName.c_str(), error.c_str());
         return 0;
     }
-    
-    // Execute the module
-    lua_call(L, 0, 1);
-    
+
+    // Execute the module in the thread.
+    int callResult = lua_resume(moduleThread, L, 0);
+    if (callResult != 0) {
+        const char* errMsg = lua_tostring(moduleThread, -1);
+        std::string error = errMsg ? errMsg : "unknown module error";
+        lua_pop(mainThread, 1); // pop thread from main stack
+        if (callResult == LUA_YIELD) {
+            luaL_error(L, "module '%s' yielded unexpectedly", path ? path : lookup.moduleName.c_str());
+        } else {
+            luaL_error(L, "error running module '%s': %s", path ? path : lookup.moduleName.c_str(), error.c_str());
+        }
+        return 0;
+    }
+
+    // Return first module result (or nil if nothing was returned),
+    // and remove the thread object from the caller stack.
+    if (lua_gettop(moduleThread) > 0) {
+        // Match lua_call(..., 1) semantics: keep only the first return value.
+        lua_pushvalue(moduleThread, 1);
+        lua_xmove(moduleThread, L, 1);
+    } else {
+        lua_pushnil(L);
+    }
+    lua_pop(mainThread, 1);
+
     return 1;
+}
+
+static void playgroundRequireConfigInit(luarequire_Configuration* config) {
+    if (!config)
+        return;
+
+    config->is_require_allowed = requireIsAllowed;
+    config->reset = requireReset;
+    config->jump_to_alias = requireJumpToAlias;
+    config->to_parent = requireToParent;
+    config->to_child = requireToChild;
+    config->is_module_present = requireIsModulePresent;
+    config->get_chunkname = requireGetChunkname;
+    config->get_loadname = requireGetLoadname;
+    config->get_cache_key = requireGetCacheKey;
+    // The playground has no alias/config filesystem; keep these callbacks inert.
+    config->get_config_status = requireGetConfigStatus;
+    config->get_alias = requireGetAlias;
+    config->load = requireLoad;
 }
 
 // Error handler that generates stack traces
@@ -455,7 +658,7 @@ static int errorHandler(lua_State* L) {
 }
 
 // Register sandbox globals
-static void registerPlaygroundGlobals(lua_State* L) {
+static void registerPlaygroundGlobals(lua_State* L, PlaygroundRequireContext* requireCtx) {
     // Open standard libraries FIRST
     luaL_openlibs(L);
     
@@ -463,9 +666,11 @@ static void registerPlaygroundGlobals(lua_State* L) {
     lua_pushcfunction(L, playgroundPrint, "print");
     lua_setglobal(L, "print");
     
-    // Override require with our custom version
-    lua_pushcfunction(L, playgroundRequire, "require");
-    lua_setglobal(L, "require");
+    // Use Luau's upstream require implementation with playground-specific navigation.
+    luaopen_require(L, playgroundRequireConfigInit, requireCtx);
+
+    // Mark builtin globals/libraries read-only and enable safeenv.
+    luaL_sandbox(L);
 }
 
 static std::string getCodegenAssembly(
@@ -546,17 +751,24 @@ EXPORT const char* luau_execute(const char* code) {
     g_printCalls.clear();
     
     // Create a new Lua state
-    std::unique_ptr<lua_State, decltype(&lua_close)> L(luaL_newstate(), lua_close);
-    if (!L) {
+    std::unique_ptr<lua_State, decltype(&lua_close)> globalState(luaL_newstate(), lua_close);
+    if (!globalState) {
         return setResult("{\"success\":false,\"output\":\"\",\"prints\":[],\"error\":\"Failed to create Lua state\"}");
     }
-    
-    // Set up sandbox
-    registerPlaygroundGlobals(L.get());
+    PlaygroundRequireContext requireCtx;
+
+    lua_State* GL = globalState.get();
+
+    // Set up sandboxed globals and require callbacks.
+    registerPlaygroundGlobals(GL, &requireCtx);
+
+    // Execute user code in its own sandboxed script thread.
+    lua_State* scriptThread = lua_newthread(GL);
+    luaL_sandboxthread(scriptThread);
     
     // Push error handler FIRST (so it's at a fixed position)
-    lua_pushcfunction(L.get(), errorHandler, "errorHandler");
-    int errHandlerIdx = lua_gettop(L.get());  // Should be 1
+    lua_pushcfunction(scriptThread, errorHandler, "errorHandler");
+    int errHandlerIdx = lua_gettop(scriptThread);  // Should be 1
     
     // Compile the code
     size_t bytecodeSize = 0;
@@ -567,11 +779,11 @@ EXPORT const char* luau_execute(const char* code) {
     }
     
     // Load the bytecode (function goes on top of error handler)
-    int loadResult = luau_load(L.get(), "=main", bytecode, bytecodeSize, 0);
+    int loadResult = luau_load(scriptThread, "=main", bytecode, bytecodeSize, 0);
     free(bytecode);
     
     if (loadResult != 0) {
-        const char* errMsg = lua_tostring(L.get(), -1);
+        const char* errMsg = lua_tostring(scriptThread, -1);
         std::string error = errMsg ? errMsg : "Failed to load bytecode";
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
@@ -584,7 +796,7 @@ EXPORT const char* luau_execute(const char* code) {
     // Execute with error handler at position 1
     int callResult = 0;
     try {
-        callResult = lua_pcall(L.get(), 0, 0, errHandlerIdx);
+        callResult = lua_pcall(scriptThread, 0, 0, errHandlerIdx);
     } catch (const std::exception& e) {
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
@@ -600,7 +812,7 @@ EXPORT const char* luau_execute(const char* code) {
     }
     
     if (callResult != 0) {
-        const char* errMsg = lua_tostring(L.get(), -1);
+        const char* errMsg = lua_tostring(scriptThread, -1);
         std::string error = errMsg ? errMsg : "Unknown runtime error";
         std::ostringstream result;
         result << "{\"success\":false,\"output\":" << json::string(g_outputBuffer);
@@ -715,45 +927,70 @@ class PlaygroundFileResolver : public Luau::FileResolver {
 public:
     std::unordered_map<std::string, std::string> sources;
     
-    // Find a source with path normalization
-    std::pair<bool, std::string> findSource(const std::string& path) const {
+    // Resolve a require path using strict flat-playground semantics.
+    std::pair<bool, std::string> resolveRequirePath(const std::string& path) const {
+        // No aliasing in playground.
+        if (!path.empty() && path[0] == '@')
+            return {false, ""};
+
+        // Require-by-string must be explicit. Flat filesystem supports only ./foo...
+        if (path.rfind("./", 0) != 0)
+            return {false, ""};
+
         std::string normalized = normalizeModulePath(path);
-        
-        // Try exact match
-        if (sources.count(normalized)) {
+        if (normalized.empty())
+            return {false, ""};
+
+        // Flat filesystem: nested paths are unsupported.
+        if (normalized.find('/') != std::string::npos)
+            return {false, ""};
+
+        const bool hasExact = sources.count(normalized) > 0;
+
+        if (hasExplicitModuleExtension(normalized))
+            return hasExact ? std::pair<bool, std::string>{true, normalized}
+                            : std::pair<bool, std::string>{false, ""};
+
+        const bool hasLuau = sources.count(normalized + ".luau") > 0;
+        const bool hasLua = sources.count(normalized + ".lua") > 0;
+
+        int matches = 0;
+        std::string winner;
+        auto record = [&](const std::string& candidate) {
+            matches++;
+            winner = candidate;
+        };
+
+        if (hasExact)
+            record(normalized);
+        if (hasLuau)
+            record(normalized + ".luau");
+        if (hasLua)
+            record(normalized + ".lua");
+
+        if (matches == 1)
+            return {true, winner};
+
+        // No match or ambiguous match: leave unresolved and let checker report.
+        return {false, ""};
+    }
+
+    // Resolve a module name that the Frontend asks to load.
+    // This must not apply require-path syntax rules; module names are already canonicalized.
+    std::pair<bool, std::string> resolveSourceName(const std::string& name) const {
+        auto it = sources.find(name);
+        if (it != sources.end())
+            return {true, name};
+
+        std::string normalized = normalizeModulePath(name);
+        if (normalized != name && sources.find(normalized) != sources.end())
             return {true, normalized};
-        }
-        
-        // Try with .luau extension
-        if (sources.count(normalized + ".luau")) {
-            return {true, normalized + ".luau"};
-        }
-        
-        // Try with .lua extension
-        if (sources.count(normalized + ".lua")) {
-            return {true, normalized + ".lua"};
-        }
-        
-        // Try without extension if it has one
-        size_t dotPos = normalized.rfind('.');
-        if (dotPos != std::string::npos) {
-            std::string withoutExt = normalized.substr(0, dotPos);
-            if (sources.count(withoutExt)) {
-                return {true, withoutExt};
-            }
-            if (sources.count(withoutExt + ".luau")) {
-                return {true, withoutExt + ".luau"};
-            }
-            if (sources.count(withoutExt + ".lua")) {
-                return {true, withoutExt + ".lua"};
-            }
-        }
-        
+
         return {false, ""};
     }
     
     std::optional<Luau::SourceCode> readSource(const Luau::ModuleName& name) override {
-        auto [found, resolvedName] = findSource(name);
+        auto [found, resolvedName] = resolveSourceName(name);
         if (found) {
             auto it = sources.find(resolvedName);
             if (it != sources.end()) {
@@ -768,13 +1005,18 @@ public:
         Luau::AstExpr* node,
         const Luau::TypeCheckLimits& limits
     ) override {
+        (void)context;
+        (void)limits;
+
         if (auto* expr = node->as<Luau::AstExprConstantString>()) {
             std::string path(expr->value.data, expr->value.size);
-            
-            auto [found, resolvedName] = findSource(path);
-            if (found) {
+
+            auto [found, resolvedName] = resolveRequirePath(path);
+            if (found)
                 return Luau::ModuleInfo{resolvedName};
-            }
+
+            // Return unresolved-but-named module info so strict mode reports Unknown require with path context.
+            return Luau::ModuleInfo{path};
         }
         return std::nullopt;
     }
@@ -805,12 +1047,64 @@ static std::unique_ptr<Luau::Frontend> g_frontend;
 static Luau::Mode g_mode = Luau::Mode::Nonstrict;
 static bool g_useNewSolver = true;
 
+static std::unordered_map<std::string, std::string> parseSerializedFastFlags(std::string_view serializedFlags) {
+    std::unordered_map<std::string, std::string> fastFlags;
+
+    while (!serializedFlags.empty()) {
+        size_t newline = serializedFlags.find('\n');
+        std::string_view line = newline == std::string_view::npos
+            ? serializedFlags
+            : serializedFlags.substr(0, newline);
+
+        if (size_t separator = line.find('='); separator != std::string_view::npos) {
+            fastFlags.emplace(
+                std::string(line.substr(0, separator)),
+                std::string(line.substr(separator + 1))
+            );
+        }
+
+        if (newline == std::string_view::npos)
+            break;
+
+        serializedFlags.remove_prefix(newline + 1);
+    }
+
+    return fastFlags;
+}
+
+static void registerFastFlags(std::unordered_map<std::string, std::string>& fastFlags) {
+    for (Luau::FValue<bool>* flag = Luau::FValue<bool>::list; flag; flag = flag->next) {
+        auto it = fastFlags.find(flag->name);
+        if (it == fastFlags.end())
+            continue;
+
+        if (it->second == "True")
+            flag->value = true;
+        else if (it->second == "False")
+            flag->value = false;
+
+        fastFlags.erase(it);
+    }
+
+    for (Luau::FValue<int>* flag = Luau::FValue<int>::list; flag; flag = flag->next) {
+        auto it = fastFlags.find(flag->name);
+        if (it == fastFlags.end())
+            continue;
+
+        try {
+            flag->value = std::stoi(it->second);
+        } catch (...) {
+        }
+
+        fastFlags.erase(it);
+    }
+}
+
 static void ensureAnalysisInit() {
     if (g_frontend) return;
     
     // Set feature flags for the new solver before any initialization
     FFlag::LuauSolverV2.value = g_useNewSolver;
-    FFlag::LuauUseWorkspacePropToChooseSolver.value = true;
     
     g_fileResolver = std::make_unique<PlaygroundFileResolver>();
     g_configResolver = std::make_unique<PlaygroundConfigResolver>();
@@ -885,9 +1179,7 @@ EXPORT void luau_set_solver(bool useNew) {
     
     // Set feature flags for the new solver
     // Both flags are needed: LuauSolverV2 enables the new solver globally,
-    // LuauUseWorkspacePropToChooseSolver allows per-frontend solver selection
     FFlag::LuauSolverV2.value = useNew;
-    FFlag::LuauUseWorkspacePropToChooseSolver.value = true;
     
     // Reset frontend to apply new solver (solver mode is set at initialization)
     if (g_frontend) {
@@ -907,6 +1199,17 @@ EXPORT void luau_set_solver(bool useNew) {
 }
 
 /**
+ * Apply Luau fast flags/ints serialized as newline-delimited "Name=Value" entries.
+ */
+EXPORT void luau_set_fflags(const char* serializedFlags) {
+    if (!serializedFlags || !*serializedFlags)
+        return;
+
+    auto fastFlags = parseSerializedFastFlags(serializedFlags);
+    registerFastFlags(fastFlags);
+}
+
+/**
  * Set source for a file (for multi-file analysis).
  */
 EXPORT void luau_set_source(const char* name, const char* source) {
@@ -916,6 +1219,16 @@ EXPORT void luau_set_source(const char* name, const char* source) {
     
     // Also add to modules for require
     g_modules[name] = source;
+}
+
+/**
+ * Clear all analysis sources and analysis-side module names.
+ */
+EXPORT void luau_clear_sources() {
+    ensureAnalysisInit();
+    g_fileResolver->sources.clear();
+    g_modules.clear();
+    g_frontend->clear();
 }
 
 /**
@@ -947,6 +1260,7 @@ EXPORT const char* luau_get_diagnostics(const char* code) {
         
         json << "{";
         json << "\"severity\":\"error\",";
+        json << "\"moduleName\":" << ::json::string(error.moduleName) << ",";
         json << "\"message\":" << ::json::string(Luau::toString(error)) << ",";
         json << "\"startLine\":" << error.location.begin.line << ",";
         json << "\"startCol\":" << error.location.begin.column << ",";
