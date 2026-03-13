@@ -185,7 +185,7 @@ function createTextMateLanguage(): StreamLanguage<TMState> {
     languageData: {
       commentTokens: { line: '--', block: { open: '--[[', close: ']]' } },
       closeBrackets: { brackets: ['(', '[', '{', '"', "'"] },
-      indentOnInput: /^\s*(end|else|elseif|until|\}|\])$/,
+      indentOnInput: /^\s*(end|else|elseif|until|\}|\]|\))$/,
     },
   });
 }
@@ -300,4 +300,3 @@ export async function highlightLuauHtml(snippet: string): Promise<string> {
 
   return parts.join('');
 }
-
