@@ -9,6 +9,23 @@
     <link rel="preload" href="/font/BuilderSans-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/font/BuilderMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <script>
+      // Prevent viewport zooming on iOS from focusing the editor
+      (function() {
+        var ua = navigator.userAgent;
+        var isIOS =
+          /iPhone|iPod|iPad/.test(ua) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+        if (!isIOS) return;
+
+        var viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) return;
+
+        viewport.setAttribute(
+          'content',
+          'width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover'
+        );
+      })();
       // Prevent theme flash - must run synchronously before CSS
       (function() {
         var theme = localStorage.getItem('theme');
