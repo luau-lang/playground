@@ -96,9 +96,6 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
       '.cm-content': {
         padding: '12px 0',
       },
-      '.cm-gutters': {
-        paddingLeft: '8px',
-      },
     }),
     
     // Update listener

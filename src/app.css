@@ -222,6 +222,10 @@ body {
   opacity: 0.12;
 }
 
+.cm-lineNumbers .cm-gutterElement {
+  padding-left: 12px !important;
+}
+
 /* CodeMirror lint gutter - custom minimal markers using SVG */
 .cm-gutterElement .cm-lint-marker,
 .cm-lint-marker {
