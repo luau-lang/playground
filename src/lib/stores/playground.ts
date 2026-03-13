@@ -13,8 +13,7 @@ export interface PlaygroundState {
   isRunning: boolean;
 }
 
-interface PersistedPlaygroundStateV1 {
-  v: 1;
+interface PersistedPlaygroundState {
   files: Record<string, string>;
   activeFile: string;
 }
@@ -45,16 +44,14 @@ function loadFromStorage(): { files: Record<string, string>; activeFile: string 
     const stored = localStorage.getItem(PLAYGROUND_STORAGE_KEY);
     if (!stored) return null;
 
-    const parsed = JSON.parse(stored) as Partial<PersistedPlaygroundStateV1>;
-    if (parsed.v !== 1) return null;
+    const parsed = JSON.parse(stored) as Partial<PersistedPlaygroundState>;
     if (!parsed.files || typeof parsed.files !== 'object') return null;
     if (!parsed.activeFile || typeof parsed.activeFile !== 'string') return null;
 
     const fileNames = Object.keys(parsed.files);
     if (fileNames.length === 0) return null;
-
-    const active = parsed.activeFile in parsed.files ? parsed.activeFile : fileNames[0];
-    return { files: parsed.files as Record<string, string>, activeFile: active };
+    if (!(parsed.activeFile in parsed.files)) return null;
+    return { files: parsed.files as Record<string, string>, activeFile: parsed.activeFile };
   } catch {
     return null;
   }
@@ -69,12 +66,11 @@ function getInitialState(): { files: Record<string, string>; activeFile: string 
   }
   
   const state = parseStateFromHash(window.location.hash);
-  if (!state || Object.keys(state.files).length === 0) {
-    return loadFromStorage() ?? defaultState;
+  if (state && Object.keys(state.files).length > 0 && state.active in state.files) {
+    return { files: state.files, activeFile: state.active };
   }
-  
-  const active = state.active in state.files ? state.active : Object.keys(state.files)[0];
-  return { files: state.files, activeFile: active };
+
+  return loadFromStorage() ?? defaultState;
 }
 
 const initialState = getInitialState();
@@ -110,11 +106,11 @@ function saveToStorage(): void {
     const a = get(activeFile);
     const fileNames = Object.keys(f);
     if (fileNames.length === 0) return;
+    if (!(a in f)) return;
 
-    const state: PersistedPlaygroundStateV1 = {
-      v: 1,
+    const state: PersistedPlaygroundState = {
       files: f,
-      activeFile: a in f ? a : fileNames[0],
+      activeFile: a,
     };
 
     localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(state));

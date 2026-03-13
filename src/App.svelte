@@ -9,51 +9,36 @@
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { loadLuauWasm } from '$lib/luau/wasm';
   import { parseStateFromHash } from '$lib/utils/decode';
-  import type { Readable } from 'svelte/store';
+  import { derived } from 'svelte/store';
   import { onMount } from 'svelte';
 
   let mounted = $state(false);
 
   function clearUrlHash(): void {
-    if (typeof window === 'undefined') return;
-    if (!window.location.hash || window.location.hash.length <= 1) return;
+    if (!window.location.hash) return;
     const url = new URL(window.location.href);
     url.hash = '';
     window.history.replaceState(null, '', url.toString());
   }
 
   onMount(() => {
-    const hadUrlState = parseStateFromHash(window.location.hash) !== null;
-    if (!hadUrlState) return;
+    if (parseStateFromHash(window.location.hash) === null) return;
 
-    let cleared = false;
-    const unsubs: Array<() => void> = [];
+    const stateChanges = derived([files, activeFile, settings, showBytecode], (values) => values);
+    let isFirstEmission = true;
+    let unsubscribe: () => void = () => {};
 
-    const watch = <T,>(store: Readable<T>) => {
-      let first = true;
-      unsubs.push(
-        store.subscribe(() => {
-          if (first) {
-            first = false;
-            return;
-          }
-          if (cleared) return;
-          cleared = true;
-          clearUrlHash();
-          // Stop watching after we've cleared once
-          for (const u of unsubs) u();
-        })
-      );
-    };
+    unsubscribe = stateChanges.subscribe(() => {
+      if (isFirstEmission) {
+        isFirstEmission = false;
+        return;
+      }
 
-    watch(files);
-    watch(activeFile);
-    watch(settings);
-    watch(showBytecode);
+      clearUrlHash();
+      unsubscribe();
+    });
 
-    return () => {
-      for (const u of unsubs) u();
-    };
+    return unsubscribe;
   });
 
   // Initialize on mount

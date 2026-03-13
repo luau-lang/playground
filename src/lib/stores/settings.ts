@@ -43,45 +43,31 @@ function loadSettingsFromStorage(): PlaygroundSettings {
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Partial<PlaygroundSettings>;
-      return {
-        mode: parsed.mode ?? defaultSettings.mode,
-        solver: parsed.solver ?? defaultSettings.solver,
-        optimizationLevel: parsed.optimizationLevel ?? defaultSettings.optimizationLevel,
-        debugLevel: parsed.debugLevel ?? defaultSettings.debugLevel,
-        outputFormat: parsed.outputFormat ?? defaultSettings.outputFormat,
-        compilerRemarks: parsed.compilerRemarks ?? defaultSettings.compilerRemarks,
-      };
-    }
+    if (!stored) return { ...defaultSettings };
+    return mergeSettings(JSON.parse(stored) as Partial<PlaygroundSettings>);
   } catch {
     // Ignore parse errors
+    return { ...defaultSettings };
   }
-  
-  return { ...defaultSettings };
 }
 
-function loadUiFromStorage(): { showBytecode: boolean } {
+function loadShowBytecodeFromStorage(): boolean {
   if (typeof window === 'undefined') {
-    return { showBytecode: false };
+    return false;
   }
 
   try {
-    const stored = localStorage.getItem(UI_STORAGE_KEY);
-    if (!stored) return { showBytecode: false };
-
-    const parsed = JSON.parse(stored) as { showBytecode?: unknown };
-    return { showBytecode: parsed.showBytecode === true };
+    return localStorage.getItem(UI_STORAGE_KEY) === '1';
   } catch {
-    return { showBytecode: false };
+    return false;
   }
 }
 
-function saveUiToStorage(state: { showBytecode: boolean }): void {
+function saveShowBytecodeToStorage(value: boolean): void {
   if (typeof window === 'undefined') return;
 
   try {
-    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(UI_STORAGE_KEY, value ? '1' : '0');
   } catch {
     // Ignore storage errors
   }
@@ -109,7 +95,7 @@ function loadSettings(): { settings: PlaygroundSettings; showBytecode: boolean }
     ? mergeSettings(settingsFromUrl)
     : loadSettingsFromStorage();
 
-  const showBytecode = showFromUrl ?? loadUiFromStorage().showBytecode;
+  const showBytecode = showFromUrl ?? loadShowBytecodeFromStorage();
 
   return {
     settings,
@@ -141,7 +127,7 @@ settings.subscribe((value) => {
 
 // Auto-save UI state when it changes
 showBytecode.subscribe((value) => {
-  saveUiToStorage({ showBytecode: value });
+  saveShowBytecodeToStorage(value);
 });
 
 export function setMode(mode: LuauMode): void {
