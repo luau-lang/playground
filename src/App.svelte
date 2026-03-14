@@ -22,6 +22,7 @@
   }
 
   onMount(() => {
+    if ($isEmbed) return;
     if (parseStateFromHash(window.location.hash) === null) return;
 
     const stateChanges = derived([files, activeFile, settings, showBytecode], (values) => values);

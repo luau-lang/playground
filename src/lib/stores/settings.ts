@@ -1,6 +1,7 @@
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import { STORAGE_KEY, UI_STORAGE_KEY, defaultSettings } from '$lib/constants';
+import { detectEmbedMode } from '$lib/stores/embed';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -40,6 +41,9 @@ function loadSettingsFromStorage(): PlaygroundSettings {
   if (typeof window === 'undefined') {
     return { ...defaultSettings };
   }
+  if (detectEmbedMode()) {
+    return { ...defaultSettings };
+  }
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -55,6 +59,9 @@ function loadShowBytecodeFromStorage(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
+  if (detectEmbedMode()) {
+    return false;
+  }
 
   try {
     return localStorage.getItem(UI_STORAGE_KEY) === '1';
@@ -65,6 +72,7 @@ function loadShowBytecodeFromStorage(): boolean {
 
 function saveShowBytecodeToStorage(value: boolean): void {
   if (typeof window === 'undefined') return;
+  if (detectEmbedMode()) return;
 
   try {
     localStorage.setItem(UI_STORAGE_KEY, value ? '1' : '0');
@@ -105,6 +113,7 @@ function loadSettings(): { settings: PlaygroundSettings; showBytecode: boolean }
 
 function saveSettings(settings: PlaygroundSettings): void {
   if (typeof window === 'undefined') return;
+  if (detectEmbedMode()) return;
   
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
@@ -120,15 +129,17 @@ export const settings = writable<PlaygroundSettings>(initialState.settings);
 // Separate store for bytecode panel visibility
 export const showBytecode = writable<boolean>(initialState.showBytecode);
 
-// Auto-save settings when they change
-settings.subscribe((value) => {
-  saveSettings(value);
-});
+if (typeof window !== 'undefined' && !detectEmbedMode()) {
+  // Auto-save settings when they change
+  settings.subscribe((value) => {
+    saveSettings(value);
+  });
 
-// Auto-save UI state when it changes
-showBytecode.subscribe((value) => {
-  saveShowBytecodeToStorage(value);
-});
+  // Auto-save UI state when it changes
+  showBytecode.subscribe((value) => {
+    saveShowBytecodeToStorage(value);
+  });
+}
 
 export function setMode(mode: LuauMode): void {
   settings.update((s) => ({ ...s, mode }));
@@ -161,4 +172,3 @@ export function toggleBytecode(): void {
 export function getSettings(): PlaygroundSettings {
   return get(settings);
 }
-

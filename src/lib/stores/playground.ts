@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import type { OutputLine } from '$lib/utils/output';
 import { DEFAULT_FILENAME, PLAYGROUND_STORAGE_KEY } from '$lib/constants';
+import { detectEmbedMode } from '$lib/stores/embed';
 
 // Re-export for backwards compatibility
 export type { OutputLine };
@@ -39,6 +40,7 @@ print("Sum:", sum)
 
 function loadFromStorage(): { files: Record<string, string>; activeFile: string } | null {
   if (typeof window === 'undefined') return null;
+  if (detectEmbedMode()) return null;
 
   try {
     const stored = localStorage.getItem(PLAYGROUND_STORAGE_KEY);
@@ -68,6 +70,10 @@ function getInitialState(): { files: Record<string, string>; activeFile: string 
   const state = parseStateFromHash(window.location.hash);
   if (state && Object.keys(state.files).length > 0 && state.active in state.files) {
     return { files: state.files, activeFile: state.active };
+  }
+
+  if (detectEmbedMode()) {
+    return defaultState;
   }
 
   return loadFromStorage() ?? defaultState;
@@ -100,6 +106,7 @@ function debounce(fn: () => void, ms: number): () => void {
 
 function saveToStorage(): void {
   if (typeof window === 'undefined') return;
+  if (detectEmbedMode()) return;
 
   try {
     const f = get(files);
@@ -120,7 +127,7 @@ function saveToStorage(): void {
 }
 
 // Persist editor state (files + active file) between reloads
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !detectEmbedMode()) {
   const scheduleSave = debounce(saveToStorage, 250);
   files.subscribe(() => scheduleSave());
   activeFile.subscribe(() => scheduleSave());
@@ -194,4 +201,3 @@ export function getActiveFileContent(): string {
   const active = get(activeFile);
   return f[active] || '';
 }
-

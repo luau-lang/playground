@@ -7,7 +7,7 @@
 
 import { readable } from 'svelte/store';
 
-function detectEmbedMode(): boolean {
+export function detectEmbedMode(): boolean {
   if (typeof window === 'undefined') return false;
   const params = new URLSearchParams(window.location.search);
   return params.get('embed') === 'true';
@@ -30,4 +30,3 @@ export const isEmbed = readable(detectEmbedMode());
  * Theme preference from embed URL param.
  */
 export const embedTheme = readable(detectEmbedTheme());
-
