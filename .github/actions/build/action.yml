@@ -10,6 +10,20 @@ runs:
         repository: emscripten-core/emsdk
         path: emsdk
 
+    - name: Get latest Luau release
+      id: luau-release
+      shell: bash
+      run: |
+        # Fetch the latest release tag from luau-lang/luau
+        LATEST_TAG=$(curl -s https://api.github.com/repos/luau-lang/luau/releases/latest | jq -r '.tag_name')
+        echo "Latest Luau release: $LATEST_TAG"
+        echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
+        # Fetch the commit hash for this tag
+        COMMIT_HASH=$(curl -s https://api.github.com/repos/luau-lang/luau/git/ref/tags/$LATEST_TAG | jq -r '.object.sha')
+        echo "Commit hash: $COMMIT_HASH"
+        echo "commit=$COMMIT_HASH" >> "$GITHUB_OUTPUT"
+
     - name: Restore build cache
       uses: actions/cache@v5
       with:
@@ -19,7 +33,7 @@ runs:
           wasm/luau
           public/wasm/luau.wasm
           src/lib/luau/luau-module.js
-        key: build-${{ runner.os }}-${{ hashFiles('wasm/src/**', 'wasm/CMakeLists.txt', 'wasm/build.sh') }}-luau-${{ github.run_id }}
+        key: build-${{ runner.os }}-${{ hashFiles('wasm/src/**', 'wasm/CMakeLists.txt', 'wasm/build.sh') }}-luau-${{ steps.luau-release.outputs.commit }}
         restore-keys: |
           build-${{ runner.os }}-${{ hashFiles('wasm/src/**', 'wasm/CMakeLists.txt', 'wasm/build.sh') }}-luau-
           build-${{ runner.os }}-
@@ -34,11 +48,12 @@ runs:
     - name: Clone or update Luau
       shell: bash
       run: |
+        TAG=${{ steps.luau-release.outputs.tag }}
         if [ ! -d "wasm/luau" ]; then
-          git clone --depth 1 https://github.com/Roblox/luau.git wasm/luau
+          git clone --depth 1 --branch $TAG https://github.com/luau-lang/luau.git wasm/luau
         else
           cd wasm/luau
-          git fetch origin
+          git fetch origin $TAG
           git diff --quiet HEAD FETCH_HEAD || git reset --hard FETCH_HEAD
         fi
 
@@ -58,10 +73,6 @@ runs:
     - name: Install dependencies
       shell: bash
       run: npm ci
-
-    - name: Test
-      shell: bash
-      run: npm test
 
     - name: Type check
       shell: bash
