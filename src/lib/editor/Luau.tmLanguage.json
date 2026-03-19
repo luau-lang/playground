@@ -6,9 +6,7 @@
   ],
   "name": "Luau",
   "scopeName": "source.luau",
-  "fileTypes": [
-    "luau"
-  ],
+  "fileTypes": ["luau"],
   "patterns": [
     {
       "include": "#function-definition"
@@ -506,14 +504,9 @@
           "patterns": [
             {
               "name": "keyword.operator.other.luau",
-              "begin": "(```luau?)\\s+",
-              "end": "(```)",
+              "begin": "(```luau?)\\s*$",
+              "while": "^(?!\\s*```)",
               "beginCaptures": {
-                "1": {
-                  "name": "comment.luau"
-                }
-              },
-              "endCaptures": {
                 "1": {
                   "name": "comment.luau"
                 }
@@ -523,6 +516,15 @@
                   "include": "source.luau"
                 }
               ]
+            },
+            {
+              "match": "(```)",
+              "name": "keyword.operator.other.luau",
+              "captures": {
+                "1": {
+                  "name": "comment.luau"
+                }
+              }
             },
             {
               "include": "#doc_comment_tags"
@@ -605,7 +607,7 @@
       ]
     },
     "type-function": {
-      "begin": "^\\b(?:(export)\\s+)?(type)\\s+(function)\\b",
+      "begin": "(?<![^.]\\.|:)\\b(?:(export)\\s+)?(type)\\s+(function)\\b",
       "beginCaptures": {
         "1": {
           "name": "storage.modifier.visibility.luau"
@@ -679,8 +681,8 @@
       ]
     },
     "type-alias-declaration": {
-      "begin": "^\\b(?:(export)\\s+)?(type)\\b",
-      "end": "(?=\\s*$)|(?=\\s*;)",
+      "begin": "(?<![^.]\\.|:)\\b(?:(export)\\s+)?(type)\\b(?=\\s+(?!function\\b)[a-zA-Z_][a-zA-Z0-9_]*)",
+      "end": "(?=[),}\\]](?!\\s*[&|]))|(?=\\s*;)|(?=\\s*\\b(?:break|continue|do|else|elseif|end|for|function|if|in|local|repeat|return|then|until|while)\\b)|(?=^\\s*$)|(?=^\\s*(?:@|\\b(?:export\\s+)?type\\b))|(?=^\\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*\\s*(?:(?:[+\\-*/%^]|\\.\\.)?=(?!=)|\\(|\\[|:))",
       "beginCaptures": {
         "1": {
           "name": "storage.modifier.visibility.luau"
@@ -718,7 +720,7 @@
           "name": "keyword.operator.typecast.luau"
         }
       },
-      "end": "(?=^|[;),}\\]:?\\-\\+\\>](?!\\s*[&\\|])|$|\\b(break|do|else|for|if|elseif|return|then|repeat|while|until|end|in|continue)\\b)",
+      "end": "(?=[),}\\]](?!\\s*[&|]))|(?=\\s*;)|(?=\\s*\\b(?:break|continue|do|else|elseif|end|for|function|if|in|local|repeat|return|then|until|while)\\b)|(?=^\\s*$)|(?=^\\s*(?:@|\\b(?:export\\s+)?type\\b))|(?=^\\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*\\s*(?:(?:[+\\-*/%^]|\\.\\.)?=(?!=)|\\(|\\[|:))",
       "patterns": [
         {
           "include": "#type_literal"
