@@ -19,7 +19,8 @@ import { luauLspExtensions } from './lspExtensions';
 import { luauEnterKeymap, luauIndentation } from './luauBlocks';
 import { forceLinting, lintGutter } from '@codemirror/lint';
 import { themeMode } from '$lib/utils/theme';
-import { cursorLine } from '$lib/stores/playground';
+import { cursorLine, isRunning } from '$lib/stores/playground';
+import { runCode, stopExecution } from '$lib/luau/wasm';
 import { get } from 'svelte/store';
 
 let editorView: EditorView | null = null;
@@ -66,6 +67,7 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     keymap.of([
       ...luauEnterKeymap,
       ...closeBracketsKeymap,
+      { key: 'Mod-Enter', run: () => { get(isRunning) ? stopExecution() : runCode(); return true; } },
       ...defaultKeymap,
       ...searchKeymap,
       ...historyKeymap,

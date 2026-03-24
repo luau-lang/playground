@@ -19,7 +19,10 @@
   
   // Delay before showing stop button to avoid flash on fast scripts
   let showStopButton = $state(false);
-  
+
+  const isMac = /Mac/i.test(navigator.platform);
+  const runShortcut = isMac ? '⌘↵' : 'Ctrl+↵';
+
   $effect(() => {
     if (!$isRunning) {
       showStopButton = false;
@@ -244,12 +247,12 @@
       <span class="hidden sm:inline">Check</span>
       <span class="sm:hidden"><Icon name="check"size={16} /></span>
     </Button>
-    <Button 
-      size="sm" 
-      variant={showStopButton ? 'secondary' : 'default'} 
-      onclick={handleRun} 
-      class="px-2 sm:px-3" 
-      title={showStopButton ? 'Stop execution' : 'Run code'}
+    <Button
+      size="sm"
+      variant={showStopButton ? 'secondary' : 'default'}
+      onclick={handleRun}
+      class="px-2 sm:px-3"
+      title={showStopButton ? 'Stop execution' : `Run code (${runShortcut})`}
     >
       <span class="sm:mr-1"><Icon name={showStopButton ? 'stop' : 'play'} size={16} /></span>
       <span class="hidden sm:inline">{showStopButton ? 'Stop' : 'Run'}</span>
