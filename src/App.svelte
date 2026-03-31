@@ -9,6 +9,7 @@
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { loadLuauWasm } from '$lib/luau/wasm';
   import { parseStateFromHash } from '$lib/utils/decode';
+  import { initAnalytics } from '$lib/analytics';
   import { derived } from 'svelte/store';
   import { onMount } from 'svelte';
 
@@ -59,7 +60,11 @@
       } else {
         initTheme();
       }
-            
+
+      if (!$isEmbed) {
+        initAnalytics();
+      }
+
       loadLuauWasm().catch(console.error);
     }
   });
