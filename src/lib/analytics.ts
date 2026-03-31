@@ -9,11 +9,9 @@ function loadGoogleAnalytics(): void {
   document.head.append(script);
 
   window.dataLayer = window.dataLayer || [];
-
   function gtag(...args: unknown[]) {
-    window.dataLayer?.push(args);
+    window.dataLayer?.push(arguments);
   }
-
   gtag('js', new Date());
   gtag('config', ANALYTICS_ID);
 }
