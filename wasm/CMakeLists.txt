@@ -45,6 +45,7 @@ set(LUAU_CODEGEN_SOURCES
     "${LUAU_SOURCE_DIR}/CodeGen/src/AssemblyBuilderX64.cpp"
     "${LUAU_SOURCE_DIR}/CodeGen/src/BytecodeAnalysis.cpp"
     "${LUAU_SOURCE_DIR}/CodeGen/src/BytecodeSummary.cpp"
+    "${LUAU_SOURCE_DIR}/CodeGen/src/CodeGen.cpp"
     "${LUAU_SOURCE_DIR}/CodeGen/src/CodeGenA64.cpp"
     "${LUAU_SOURCE_DIR}/CodeGen/src/CodeGenAssembly.cpp"
     "${LUAU_SOURCE_DIR}/CodeGen/src/CodeGenUtils.cpp"
@@ -73,7 +74,6 @@ set(LUAU_CODEGEN_SOURCES
 # Excluded (require native JIT features):
 # - CodeAllocator.cpp (uses __clear_cache, mprotect)
 # - CodeBlockUnwind.cpp (platform-specific unwind registration)
-# - CodeGen.cpp (main JIT entry with platform detection)
 # - CodeGenContext.cpp (JIT context management)
 # - SharedCodeAllocator.cpp (shared code allocation)
 # - lcodegen.cpp (C interface to JIT)
