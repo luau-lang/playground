@@ -879,6 +879,8 @@ EXPORT const char* luau_dump_bytecode(const char* code, int optimizationLevel, i
             asmOptions.includeIr = true;
             asmOptions.includeIrTypes = false;
             asmOptions.includeOutlinedCode = false;
+            // Include top-level "cold" code (no loops) so playground shows output for all code, not just functions
+            asmOptions.compilationOptions.flags = Luau::CodeGen::CodeGen_ColdFunctions;
             dump = getCodegenAssembly("main", bytecode.getBytecode(), asmOptions, nullptr);
             break;
         case 2:
@@ -888,6 +890,7 @@ EXPORT const char* luau_dump_bytecode(const char* code, int optimizationLevel, i
             asmOptions.includeIr = true;
             asmOptions.includeIrTypes = false;
             asmOptions.includeOutlinedCode = false;
+            asmOptions.compilationOptions.flags = Luau::CodeGen::CodeGen_ColdFunctions;
             dump = getCodegenAssembly("main", bytecode.getBytecode(), asmOptions, nullptr);
             break;
         case 3:
@@ -897,6 +900,7 @@ EXPORT const char* luau_dump_bytecode(const char* code, int optimizationLevel, i
             asmOptions.includeIr = true;
             asmOptions.includeIrTypes = false;
             asmOptions.includeOutlinedCode = false;
+            asmOptions.compilationOptions.flags = Luau::CodeGen::CodeGen_ColdFunctions;
             dump = getCodegenAssembly("main", bytecode.getBytecode(), asmOptions, nullptr);
             break;
 
