@@ -15,6 +15,7 @@
   const VERTICAL_PADDING = 24;
   const VERTICAL_PADDING_TOP = VERTICAL_PADDING / 2;
   const OVERSCAN_ROWS = 30;
+  const AUTO_SCROLL_MAX_DISTANCE_VIEWPORTS = 5;
 
   let bytecodeContent = $state('');
   let parsedLines = $state<ParsedLine[]>([]);
@@ -379,11 +380,25 @@
     const lineTop = VERTICAL_PADDING_TOP + index * ROW_HEIGHT;
     const lineBottom = lineTop + ROW_HEIGHT;
     const currentScrollTop = bytecodeContainer.scrollTop;
-    const currentScrollBottom = currentScrollTop + bytecodeContainer.clientHeight;
-    if (lineTop < currentScrollTop || lineBottom > currentScrollBottom) {
+    const viewport = bytecodeContainer.clientHeight;
+    const currentScrollBottom = currentScrollTop + viewport;
+
+    let targetScrollTop: number | null = null;
+    let distance = 0;
+    if (lineTop < currentScrollTop) {
+      distance = currentScrollTop - lineTop;
+      targetScrollTop = Math.max(0, lineTop - ROW_HEIGHT * 3);
+    } else if (lineBottom > currentScrollBottom) {
+      distance = lineBottom - currentScrollBottom;
+      targetScrollTop = Math.max(0, lineTop - ROW_HEIGHT * 3);
+    }
+
+    if (targetScrollTop != null) {
+      // Long smooth scrolls force the virtual list through many intermediate windows.
+      const behavior = distance <= viewport * AUTO_SCROLL_MAX_DISTANCE_VIEWPORTS ? 'smooth' : 'auto';
       bytecodeContainer.scrollTo({
-        top: Math.max(0, lineTop - ROW_HEIGHT * 3),
-        behavior: 'smooth'
+        top: targetScrollTop,
+        behavior
       });
     }
   });
