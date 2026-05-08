@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import { files, activeFile, cursorLine } from '$lib/stores/playground';
   import { settings, showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { getBytecode } from '$lib/luau/wasm';
@@ -323,9 +322,12 @@
   ) {
     isLoading = true;
     error = null;
+    // Bytecode/source synchronization depends on emitted line info. Debug level 0
+    // produces VM dumps with every instruction reported as line 0.
+    const bytecodeDebugLevel = Math.max(debugLevel, 1);
     
     try {
-      const result = await getBytecode(code, optimizationLevel, debugLevel, format, showRemarks);
+      const result = await getBytecode(code, optimizationLevel, bytecodeDebugLevel, format, showRemarks);
       if (result.success) {
         const lines = parseLines(result.bytecode);
         highlightedLineCache = new Map();
@@ -366,22 +368,14 @@
   }
 
   let bytecodeContainer: HTMLElement | undefined = $state();
-  let cursorScrollToken = 0;
 
   function handleBytecodeScroll(event: Event) {
     scrollTop = (event.currentTarget as HTMLElement).scrollTop;
   }
 
-  async function scrollToCursorLine(line: number, index: number) {
-    const token = ++cursorScrollToken;
-
-    await tick();
-    await new Promise(requestAnimationFrame);
-
-    if (token !== cursorScrollToken || !bytecodeContainer || $cursorLine !== line) {
-      return;
-    }
-
+  function scrollToCursorLine(index: number) {
+    if (!bytecodeContainer) return;
+    
     const lineTop = VERTICAL_PADDING_TOP + index * ROW_HEIGHT;
     const lineBottom = lineTop + ROW_HEIGHT;
     const currentScrollTop = bytecodeContainer.scrollTop;
@@ -419,7 +413,7 @@
     const index = sourceLineIndexes[line];
     if (index == null) return;
 
-    void scrollToCursorLine(line, index);
+    scrollToCursorLine(index);
   });
 </script>
 
