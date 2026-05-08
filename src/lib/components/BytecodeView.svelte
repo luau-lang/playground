@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { files, activeFile, cursorLine } from '$lib/stores/playground';
   import { settings, showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { getBytecode } from '$lib/luau/wasm';
@@ -365,17 +366,21 @@
   }
 
   let bytecodeContainer: HTMLElement | undefined = $state();
+  let cursorScrollToken = 0;
 
   function handleBytecodeScroll(event: Event) {
     scrollTop = (event.currentTarget as HTMLElement).scrollTop;
   }
 
-  // Scroll the first highlighted line into view when cursorLine changes
-  $effect(() => {
-    const line = $cursorLine;
-    if (line == null || !bytecodeContainer) return;
-    const index = sourceLineIndexes[line];
-    if (index == null) return;
+  async function scrollToCursorLine(line: number, index: number) {
+    const token = ++cursorScrollToken;
+
+    await tick();
+    await new Promise(requestAnimationFrame);
+
+    if (token !== cursorScrollToken || !bytecodeContainer || $cursorLine !== line) {
+      return;
+    }
 
     const lineTop = VERTICAL_PADDING_TOP + index * ROW_HEIGHT;
     const lineBottom = lineTop + ROW_HEIGHT;
@@ -400,7 +405,21 @@
         top: targetScrollTop,
         behavior
       });
+
+      if (behavior === 'auto') {
+        scrollTop = bytecodeContainer.scrollTop;
+      }
     }
+  }
+
+  // Scroll the first highlighted line into view when cursorLine changes
+  $effect(() => {
+    const line = $cursorLine;
+    if (line == null || !bytecodeContainer) return;
+    const index = sourceLineIndexes[line];
+    if (index == null) return;
+
+    void scrollToCursorLine(line, index);
   });
 </script>
 
