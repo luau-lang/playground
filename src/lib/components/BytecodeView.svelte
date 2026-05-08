@@ -11,11 +11,33 @@
     type: 'empty' | 'func-header' | 'bytecode' | 'ir-comment' | 'asm' | 'comment' | 'other';
   }
 
+  const ROW_HEIGHT = 20;
+  const VERTICAL_PADDING = 24;
+  const VERTICAL_PADDING_TOP = VERTICAL_PADDING / 2;
+  const OVERSCAN_ROWS = 30;
+
   let bytecodeContent = $state('');
   let parsedLines = $state<ParsedLine[]>([]);
+  let sourceLineIndexes = $state<Record<number, number>>({});
+  let highlightedLineCache = new Map<number, string>();
   let outputFormat = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
+  let scrollTop = $state(0);
+  let viewportHeight = $state(0);
+
+  let visibleStart = $derived(
+    Math.max(0, Math.floor(Math.max(0, scrollTop - VERTICAL_PADDING_TOP) / ROW_HEIGHT) - OVERSCAN_ROWS)
+  );
+  let visibleEnd = $derived(
+    Math.min(
+      parsedLines.length,
+      Math.ceil(Math.max(0, scrollTop - VERTICAL_PADDING_TOP + viewportHeight) / ROW_HEIGHT) + OVERSCAN_ROWS
+    )
+  );
+  let visibleLines = $derived(parsedLines.slice(visibleStart, visibleEnd));
+  let visibleOffset = $derived(VERTICAL_PADDING_TOP + visibleStart * ROW_HEIGHT);
+  let virtualContentHeight = $derived(parsedLines.length * ROW_HEIGHT + VERTICAL_PADDING);
 
   // Refresh bytecode when file content or settings change
   $effect(() => {
@@ -27,6 +49,21 @@
     }
   });
 
+  function makeLine(raw: string, sourceLine: number | null, type: ParsedLine['type']): ParsedLine {
+    return { raw, sourceLine, type };
+  }
+
+  function getHighlightedLine(index: number, line: ParsedLine): string {
+    const cached = highlightedLineCache.get(index);
+    if (cached != null) {
+      return cached;
+    }
+
+    const highlighted = highlightLine(line.raw, line.type);
+    highlightedLineCache.set(index, highlighted);
+    return highlighted;
+  }
+
   function parseLines(raw: string): ParsedLine[] {
     const lines = raw.split('\n');
     const result: ParsedLine[] = [];
@@ -37,7 +74,7 @@
       
       // Empty line - reset context
       if (!trimmed) {
-        result.push({ raw: line, sourceLine: null, type: 'empty' as const });
+        result.push(makeLine(line, null, 'empty'));
         continue;
       }
 
@@ -46,64 +83,71 @@
       const bytecodeMatch = trimmed.match(/^(\d+):\s/);
       if (bytecodeMatch) {
         currentSourceLine = parseInt(bytecodeMatch[1], 10);
-        result.push({ 
-          raw: line, 
-          sourceLine: currentSourceLine,
-          type: 'bytecode' as const
-        });
+        result.push(makeLine(line, currentSourceLine, 'bytecode'));
         continue;
       }
 
       // Function header (VM format): "Function N (name):" - reset context
       if (trimmed.match(/^Function\s+\d+\s*\([^)]*\)\s*:?$/)) {
         currentSourceLine = null;
-        result.push({ raw: line, sourceLine: null, type: 'func-header' as const });
+        result.push(makeLine(line, null, 'func-header'));
         continue;
       }
 
       // IR/ASM function header: "; function name() line N" - reset context
       if (trimmed.match(/^;\s*function\s/)) {
         currentSourceLine = null;
-        result.push({ raw: line, sourceLine: null, type: 'func-header' as const });
+        result.push(makeLine(line, null, 'func-header'));
         continue;
       }
 
       // Block header: "# bb_name:" - reset context (new block)
       if (trimmed.match(/^#\s*bb_\w+:/)) {
         currentSourceLine = null;
-        result.push({ raw: line, sourceLine: null, type: 'ir-comment' as const });
+        result.push(makeLine(line, null, 'ir-comment'));
         continue;
       }
 
       // IR comment lines starting with # - inherit current source line
       if (trimmed.startsWith('#')) {
-        result.push({ raw: line, sourceLine: currentSourceLine, type: 'ir-comment' as const });
+        result.push(makeLine(line, currentSourceLine, 'ir-comment'));
         continue;
       }
 
       // Block metadata comments (successors, predecessors, in/out regs) - no source line
       if (trimmed.match(/^;\s*(successors|predecessors|in regs|out regs):/)) {
-        result.push({ raw: line, sourceLine: null, type: 'comment' as const });
+        result.push(makeLine(line, null, 'comment'));
         continue;
       }
 
       // Comment lines starting with ; - no source line context
       if (trimmed.startsWith(';')) {
-        result.push({ raw: line, sourceLine: null, type: 'comment' as const });
+        result.push(makeLine(line, null, 'comment'));
         continue;
       }
 
       // Assembly labels (.L11:) and instructions - inherit current source line
       // Labels are just internal jump targets, not boundaries between source lines
       if (trimmed.startsWith('.') || trimmed.match(/^[a-z]/i)) {
-        result.push({ raw: line, sourceLine: currentSourceLine, type: 'asm' as const });
+        result.push(makeLine(line, currentSourceLine, 'asm'));
         continue;
       }
 
-      result.push({ raw: line, sourceLine: currentSourceLine, type: 'other' as const });
+      result.push(makeLine(line, currentSourceLine, 'other'));
     }
     
     return result;
+  }
+
+  function buildSourceLineIndexes(lines: ParsedLine[]): Record<number, number> {
+    const indexes: Record<number, number> = {};
+    for (let i = 0; i < lines.length; i += 1) {
+      const sourceLine = lines[i].sourceLine;
+      if (sourceLine != null && indexes[sourceLine] == null) {
+        indexes[sourceLine] = i;
+      }
+    }
+    return indexes;
   }
 
   // Highlight IR instruction arguments
@@ -281,12 +325,17 @@
     try {
       const result = await getBytecode(code, optimizationLevel, debugLevel, format, showRemarks);
       if (result.success) {
+        const lines = parseLines(result.bytecode);
+        highlightedLineCache = new Map();
         bytecodeContent = result.bytecode;
-        parsedLines = parseLines(result.bytecode);
+        parsedLines = lines;
+        sourceLineIndexes = buildSourceLineIndexes(lines);
       } else {
+        highlightedLineCache = new Map();
         error = result.error || 'Compilation failed';
         bytecodeContent = '';
         parsedLines = [];
+        sourceLineIndexes = {};
       }
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -295,8 +344,10 @@
       } else {
         error = errMsg;
       }
+      highlightedLineCache = new Map();
       bytecodeContent = '';
       parsedLines = [];
+      sourceLineIndexes = {};
     } finally {
       isLoading = false;
     }
@@ -314,13 +365,26 @@
 
   let bytecodeContainer: HTMLElement | undefined = $state();
 
+  function handleBytecodeScroll(event: Event) {
+    scrollTop = (event.currentTarget as HTMLElement).scrollTop;
+  }
+
   // Scroll the first highlighted line into view when cursorLine changes
   $effect(() => {
     const line = $cursorLine;
     if (line == null || !bytecodeContainer) return;
-    const el = bytecodeContainer.querySelector('.line.highlighted');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+    const index = sourceLineIndexes[line];
+    if (index == null) return;
+
+    const lineTop = VERTICAL_PADDING_TOP + index * ROW_HEIGHT;
+    const lineBottom = lineTop + ROW_HEIGHT;
+    const currentScrollTop = bytecodeContainer.scrollTop;
+    const currentScrollBottom = currentScrollTop + bytecodeContainer.clientHeight;
+    if (lineTop < currentScrollTop || lineBottom > currentScrollBottom) {
+      bytecodeContainer.scrollTo({
+        top: Math.max(0, lineTop - ROW_HEIGHT * 3),
+        behavior: 'smooth'
+      });
     }
   });
 </script>
@@ -341,23 +405,30 @@
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-auto font-mono text-xs leading-relaxed min-h-0 bytecode-view" bind:this={bytecodeContainer}>
+    <div
+      class="flex-1 overflow-auto font-mono text-xs min-h-0 bytecode-view"
+      bind:this={bytecodeContainer}
+      bind:clientHeight={viewportHeight}
+      onscroll={handleBytecodeScroll}
+    >
       {#if error}
         <div class="text-error-500 p-3">
           <div class="font-semibold mb-1">Compilation Error:</div>
           <pre class="whitespace-pre-wrap">{error}</pre>
         </div>
       {:else if parsedLines.length > 0}
-        <div class="bytecode-content">
-          {#each parsedLines as line}
-            <div 
-              class="line" 
-              class:highlighted={line.sourceLine === $cursorLine}
-              class:empty={line.type === 'empty'}
-            >
-              {@html highlightLine(line.raw, line.type)}
-            </div>
-          {/each}
+        <div class="bytecode-content" style={`height: ${virtualContentHeight}px;`}>
+          <div class="virtual-lines" style={`transform: translateY(${visibleOffset}px);`}>
+            {#each visibleLines as line, i (visibleStart + i)}
+              <div 
+                class="line" 
+                class:highlighted={line.sourceLine === $cursorLine}
+                class:empty={line.type === 'empty'}
+              >
+                {@html getHighlightedLine(visibleStart + i, line)}
+              </div>
+            {/each}
+          </div>
         </div>
       {:else if bytecodeContent}
         <pre class="text-(--text-primary) whitespace-pre p-3">{bytecodeContent}</pre>
@@ -417,17 +488,31 @@
   }
 
   .bytecode-content {
-    padding: 0.75rem 0;
+    min-width: 100%;
+    position: relative;
+  }
+
+  .virtual-lines {
+    left: 0;
+    min-width: 100%;
+    position: absolute;
+    right: 0;
+    top: 0;
+    will-change: transform;
   }
 
   .line {
+    box-sizing: border-box;
+    height: 20px;
+    line-height: 20px;
+    min-width: 100%;
     padding: 0 0.75rem;
     white-space: pre;
-    min-height: 1.25em;
+    width: max-content;
   }
 
   .line.empty {
-    height: 1.25em;
+    height: 20px;
   }
 
   .line.highlighted {
