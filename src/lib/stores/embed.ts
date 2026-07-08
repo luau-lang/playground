@@ -6,6 +6,7 @@
  */
 
 import { readable } from 'svelte/store';
+import { type ThemeMode } from '$lib/utils/theme';
 
 export function detectEmbedMode(): boolean {
   if (typeof window === 'undefined') return false;
@@ -13,12 +14,12 @@ export function detectEmbedMode(): boolean {
   return params.get('embed') === 'true';
 }
 
-function detectEmbedTheme(): 'light' | 'dark' | 'auto' {
-  if (typeof window === 'undefined') return 'auto';
+function detectEmbedTheme(): ThemeMode {
+  if (typeof window === 'undefined') return 'system';
   const params = new URLSearchParams(window.location.search);
   const theme = params.get('theme');
   if (theme === 'light' || theme === 'dark') return theme;
-  return 'auto';
+  return 'system';
 }
 
 /**

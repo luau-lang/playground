@@ -2,6 +2,7 @@
   import Button from '$lib/components/Button.svelte';
   import { Icon, type IconName } from '$lib/icons';
   import ConfigPopover from '$lib/components/ConfigPopover.svelte';
+  import EmbedPopover from '$lib/components/EmbedPopover.svelte';
   import { files, activeFile, addFile, removeFile, setActiveFile, renameFile } from '$lib/stores/playground';
   import { showBytecode, toggleBytecode } from '$lib/stores/settings';
   import { toggleTheme, themeMode } from '$lib/utils/theme';
@@ -242,6 +243,7 @@
           <span class="sm:hidden"><Icon name="share" size={16} /></span>
         {/if}
       </Button>
+      <EmbedPopover />
     {/if}
     <Button size="sm" variant="secondary" onclick={handleCheck} class="px-2 sm:px-3" title="Check code for errors">
       <span class="hidden sm:inline">Check</span>

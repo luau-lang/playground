@@ -6,6 +6,7 @@
 
 import { files, activeFile } from '$lib/stores/playground';
 import { settings, showBytecode, type PlaygroundSettings } from '$lib/stores/settings';
+import { type ThemeMode } from '$lib/utils/theme';
 import { defaultSettings, CURRENT_VERSION, DEFAULT_FILENAME } from '$lib/constants';
 import { get } from 'svelte/store';
 import LZString from 'lz-string';
@@ -83,6 +84,33 @@ export function generatePlaygroundUrl(): URL {
   const encoded = encodeState(state);
   url.hash = encoded;
   return url;
+}
+
+/**
+ * Generate an embed URL for the current playground state.
+ */
+export function generateEmbedUrl(theme: ThemeMode = 'system'): URL {
+  const state: ShareState = {
+    files: get(files),
+    active: get(activeFile),
+    v: CURRENT_VERSION,
+    settings: get(settings),
+    showBytecode: get(showBytecode),
+  };
+
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set('embed', 'true');
+  if (theme !== 'system') url.searchParams.set('theme', theme);
+  url.hash = encodeState(state);
+  return url;
+}
+
+/**
+ * Generate an iframe embed code snippet for the current playground state.
+ */
+export function generateEmbedCode(theme: ThemeMode = 'system', height = '400px'): string {
+  const url = generateEmbedUrl(theme);
+  return `<iframe\n  src="${url.toString()}"\n  width="100%"\n  height="${height}"\n  style="border: 1px solid #e2e8f0; border-radius: 8px;"\n  loading="lazy"\n  allow="clipboard-write"\n  title="Luau Playground"\n></iframe>`;
 }
 
 /**
