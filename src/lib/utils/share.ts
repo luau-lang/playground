@@ -90,6 +90,8 @@ export function generatePlaygroundUrl(): URL {
  * Generate an embed URL for the current playground state.
  */
 export function generateEmbedUrl(theme: ThemeMode = 'system'): URL {
+  if (typeof window === 'undefined') return new URL('https://play.luau.org/');
+
   const state: ShareState = {
     files: get(files),
     active: get(activeFile),
