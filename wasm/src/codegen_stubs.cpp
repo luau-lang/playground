@@ -13,7 +13,6 @@ LUAU_FASTINTVARIABLE(CodegenHeuristicsInstructionLimit, 25000)
 LUAU_FASTINTVARIABLE(CodegenHeuristicsBlockLimit, 25000)
 LUAU_FASTINTVARIABLE(CodegenHeuristicsBlockInstructionLimit, 25000)
 LUAU_FASTFLAGVARIABLE(LuauCodegenCounterSupport)
-LUAU_FASTFLAGVARIABLE(LuauCodegenInteger2)
 LUAU_FASTFLAGVARIABLE(LuauCodegenInteger3)
 
 namespace Luau
