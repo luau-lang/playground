@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
+    "sync:grammar": "node scripts/sync-textmate-grammar.mjs",
     "build:wasm": "cd wasm && ./build.sh",
     "prebuild": "npm run build:wasm",
     "build": "vite build",

@@ -70,6 +70,10 @@ runs:
         node-version: 24
         cache: npm
 
+    - name: Sync TextMate grammar
+      shell: bash
+      run: npm run sync:grammar
+
     - name: Install dependencies
       shell: bash
       run: npm ci
