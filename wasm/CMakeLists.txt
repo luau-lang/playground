@@ -211,7 +211,6 @@ if(EMSCRIPTEN)
         -O3
         -flto
         --closure 1
-        -sWASM_BIGINT=1
         
         # Dead code elimination
         -Wl,--gc-sections
