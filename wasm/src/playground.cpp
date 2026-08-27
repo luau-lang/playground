@@ -41,7 +41,7 @@
 LUAU_FASTFLAG(LuauSolverV2)
 
 // this is defined in a unit we exclude in our build system, so I guess we can do this.
-// LUAU_FASTFLAGVARIABLE(LuauCodegenProtectData)
+LUAU_FASTFLAGVARIABLE(LuauCodegenProtectData)
 
 // Luau VM headers
 #include "lua.h"
