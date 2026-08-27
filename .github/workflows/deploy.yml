@@ -12,6 +12,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read
 
 concurrency:
   group: pages
@@ -45,3 +46,58 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    if: always() # we should always run notify, regardless of build or deploy succeeding/failing
+    steps:
+      - name: Deployment status notification
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Roll the two jobs up into one status. If either failed the deploy
+          # failed (a failed build skips deploy, so DEPLOY_RESULT is "skipped"
+          # in that case); only a clean build + deploy counts as success.
+          if [[ "$BUILD_RESULT" == "success" && "$DEPLOY_RESULT" == "success" ]]; then
+            CURRENT_STATUS="success"
+          elif [[ "$BUILD_RESULT" == "failure" || "$DEPLOY_RESULT" == "failure" ]]; then
+            CURRENT_STATUS="failure"
+          else
+            echo "Neither a clean success nor a failure (build=$BUILD_RESULT, deploy=$DEPLOY_RESULT). Skipping."
+            exit 0
+          fi
+
+          # Conclusion of the most recent *completed* run on main. The current
+          # run is still in progress here, so it is excluded by status=completed.
+          LAST_STATUS=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?branch=main&status=completed&per_page=1" \
+            | jq -r '.workflow_runs[0].conclusion')
+
+          echo "Previous run conclusion: $LAST_STATUS; current status: $CURRENT_STATUS"
+
+          # Only announce transitions between success and failure, so a run of
+          # green (or red) deploys doesn't spam the channel every time.
+          if [[ "$CURRENT_STATUS" == "success" && "$LAST_STATUS" == "failure" ]]; then
+            TEXT=":white_check_mark: *Playground deployments are working again!*"
+          elif [[ "$CURRENT_STATUS" == "failure" && "$LAST_STATUS" != "failure" ]]; then
+            TEXT=":rotating_light: *Playground deployments have stopped working.*"
+          else
+            echo "No status transition detected. Skipping notification."
+            exit 0
+          fi
+
+          echo "Sending Slack notification: $TEXT"
+
+          curl -sS -o /dev/null -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            --data "{
+              \"channel\": \"$CHANNEL_ID\",
+              \"text\": \"$TEXT (<$RUN_URL|view workflow run>)\"
+            }"
