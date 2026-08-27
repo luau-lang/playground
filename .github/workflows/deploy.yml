@@ -94,10 +94,19 @@ jobs:
 
           echo "Sending Slack notification: $TEXT"
 
-          curl -sS -o /dev/null -X POST https://slack.com/api/chat.postMessage \
+          RESPONSE=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
             --data "{
               \"channel\": \"$CHANNEL_ID\",
               \"text\": \"$TEXT (<$RUN_URL|view workflow run>)\"
-            }"
+            }")
+
+          echo "Slack API response: $RESPONSE"
+
+          # chat.postMessage returns HTTP 200 even on failure; the real result
+          # is in the JSON "ok"/"error" fields, so check those explicitly.
+          if [[ "$(echo "$RESPONSE" | jq -r '.ok')" != "true" ]]; then
+            echo "Slack notification failed: $(echo "$RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
