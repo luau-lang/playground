@@ -9,7 +9,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, indentUnit } from '@codemirror/language';
-import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import { acceptCompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 
 import { luauTextMate, initLuauTextMate } from './textmate';
@@ -72,6 +72,7 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
       ...defaultKeymap,
       ...searchKeymap,
       ...historyKeymap,
+      { key: 'Tab', run: acceptCompletion },
       indentWithTab,
     ]),
     
