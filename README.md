@@ -142,5 +142,3 @@ The expanded height is measured from the code when the snippet is generated — 
 against the editor's line height, plus the tab bar for multi-file embeds — and capped at
 `80vh`. Code that already fits gets a plain iframe with no toggle. Editing the code inside
 an embed does not change these heights; regenerate the snippet to update them.
-
-To try this locally, run `npm run dev` and open `/embed-demo.html`.
