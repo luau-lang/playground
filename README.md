@@ -116,3 +116,25 @@ https://play.luau.org/?embed=true#<compressed-state>
 Query parameters:
 - `embed=true`: Enables embed mode (hides settings, bytecode toggle, share button)
 - `theme=light|dark`: Force a specific theme (defaults to `auto` which follows system preference)
+- `icons=true`: Use icon-only controls instead of text labels
+
+Embeds always include a copy button for the active file. When the embed contains a single
+file there is no tab bar — the controls float over the editor instead.
+
+#### Expandable embeds
+
+An iframe cannot resize itself, so the expand button only appears when the code is clipped
+*and* the host page opts in by loading `embed.js` (included in the generated snippet):
+
+```html
+<iframe src="https://play.luau.org/?embed=true#<state>"></iframe>
+<script src="https://play.luau.org/embed.js" async></script>
+```
+
+The script handles every playground embed on the page, matching iframes by origin or by a
+`data-luau-playground` attribute. The embed asks for the height it needs to show the whole
+file and asks for the original height back when collapsed; while expanded it keeps the
+height in sync as the code or output panel grows.
+
+To try this locally, run `npm run dev` and open `/embed-demo.html`. Screenshots of the
+embed variants live in [`docs/embed/`](docs/embed/).

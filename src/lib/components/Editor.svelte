@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { files, activeFile, updateFile } from '$lib/stores/playground';
+  import { editorScroller } from '$lib/stores/editorViewport';
   import { get } from 'svelte/store';
 
   let editorContainer: HTMLDivElement;
@@ -23,9 +24,11 @@
     });
     
     isLoading = false;
+    editorScroller.set(editorContainer.querySelector('.cm-scroller'));
   });
 
   onDestroy(() => {
+    editorScroller.set(null);
     editorModule?.destroyEditor();
   });
 

@@ -2,6 +2,7 @@
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
   import { generateEmbedCode } from '$lib/utils/share';
+  import { copyText } from '$lib/utils/clipboard';
   import { type ThemeMode } from '$lib/utils/theme';
 
   const themeOptions: { value: ThemeMode; label: string }[] = [
@@ -10,19 +11,21 @@
     { value: 'dark', label: 'Dark' },
   ];
 
+  const controlOptions: { value: boolean; label: string }[] = [
+    { value: false, label: 'Text' },
+    { value: true, label: 'Icons' },
+  ];
+
   let selectedTheme = $state<ThemeMode>('system');
+  let useIcons = $state(false);
   let copySuccess = $state(false);
 
-  let embedCode = $derived(generateEmbedCode(selectedTheme));
+  let embedCode = $derived(generateEmbedCode(selectedTheme, useIcons));
 
   async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(embedCode);
-      copySuccess = true;
-      setTimeout(() => { copySuccess = false; }, 2000);
-    } catch {
-      // fallback — select the textarea
-    }
+    copySuccess = await copyText(embedCode);
+    if (!copySuccess) return;
+    setTimeout(() => { copySuccess = false; }, 2000);
   }
 </script>
 
@@ -61,6 +64,26 @@
                 ? 'bg-(--bg-tertiary) border-(--accent) text-(--text-primary)'
                 : 'hover:bg-(--bg-tertiary) border-transparent text-(--text-secondary)'}"
             onclick={() => { selectedTheme = option.value; }}
+          >
+            {option.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Control style -->
+    <div class="space-y-1.5">
+      <span class="text-xs text-(--text-muted)">Controls</span>
+      <div class="flex gap-1">
+        {#each controlOptions as option}
+          {@const isSelected = useIcons === option.value}
+          <button
+            type="button"
+            class="flex-1 px-2 py-1.5 text-xs rounded-md transition-colors border
+              {isSelected
+                ? 'bg-(--bg-tertiary) border-(--accent) text-(--text-primary)'
+                : 'hover:bg-(--bg-tertiary) border-transparent text-(--text-secondary)'}"
+            onclick={() => { useIcons = option.value; }}
           >
             {option.label}
           </button>

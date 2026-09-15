@@ -14,6 +14,12 @@ export function detectEmbedMode(): boolean {
   return params.get('embed') === 'true';
 }
 
+function detectEmbedIcons(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('icons') === 'true';
+}
+
 function detectEmbedTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'system';
   const params = new URLSearchParams(window.location.search);
@@ -31,3 +37,8 @@ export const isEmbed = readable(detectEmbedMode());
  * Theme preference from embed URL param.
  */
 export const embedTheme = readable(detectEmbedTheme());
+
+/**
+ * Whether embed controls should use icons instead of text labels.
+ */
+export const embedIcons = readable(detectEmbedIcons());
