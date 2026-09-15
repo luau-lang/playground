@@ -143,5 +143,4 @@ against the editor's line height, plus the tab bar for multi-file embeds — and
 `80vh`. Code that already fits gets a plain iframe with no toggle. Editing the code inside
 an embed does not change these heights; regenerate the snippet to update them.
 
-To try this locally, run `npm run dev` and open `/embed-demo.html`. Screenshots of the
-embed variants live in [`docs/embed/`](docs/embed/).
+To try this locally, run `npm run dev` and open `/embed-demo.html`.
