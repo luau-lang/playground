@@ -123,18 +123,25 @@ file there is no tab bar — the controls float over the editor instead.
 
 #### Expandable embeds
 
-An iframe cannot resize itself, so the expand button only appears when the code is clipped
-*and* the host page opts in by loading `embed.js` (included in the generated snippet):
+An iframe cannot resize itself, so the frame's height belongs to the host page. When the
+code does not fit the requested height, the generated snippet brings its own expand
+toggle — a checkbox and a label, with no script on either side:
 
 ```html
-<iframe src="https://play.luau.org/?embed=true#<state>"></iframe>
-<script src="https://play.luau.org/embed.js" async></script>
+<div class="luau-embed" style="--luau-collapsed: 400px; --luau-expanded: 828px;">
+  <input class="luau-embed-toggle" id="luau-embed-k3f9qa" type="checkbox">
+  <iframe src="https://play.luau.org/?embed=true#<state>"></iframe>
+  <label class="luau-embed-label" for="luau-embed-k3f9qa">
+    <span class="luau-embed-more">Expand ▾</span>
+    <span class="luau-embed-less">Collapse ▴</span>
+  </label>
+</div>
 ```
 
-The script handles every playground embed on the page, matching iframes by origin or by a
-`data-luau-playground` attribute. The embed asks for the height it needs to show the whole
-file and asks for the original height back when collapsed; while expanded it keeps the
-height in sync as the code or output panel grows.
+The expanded height is measured from the code when the snippet is generated — line count
+against the editor's line height, plus the tab bar for multi-file embeds — and capped at
+`80vh`. Code that already fits gets a plain iframe with no toggle. Editing the code inside
+an embed does not change these heights; regenerate the snippet to update them.
 
 To try this locally, run `npm run dev` and open `/embed-demo.html`. Screenshots of the
 embed variants live in [`docs/embed/`](docs/embed/).

@@ -2,9 +2,11 @@
 
 Screenshots from the embed work. The live harness is [`/embed-demo.html`](../../embed-demo.html) — start the app with `npm run dev` and open that path.
 
+Ownership: the playground owns everything inside the frame, the host page owns the frame's size and the expand toggle.
+
 ## Single-file overlay
 
-No tab bar. Copy, expand (when clipped), check, run, and open sit on the editor.
+No tab bar. Copy, check, run, and open sit on the editor.
 
 ![Dark overlay](overlay-dark.png)
 
@@ -22,15 +24,15 @@ Tabs stay in the header. `icons=true` swaps labels for icons; below the `sm` bre
 
 ## Expand in place
 
-The host page loads `embed.js` so the iframe can grow downward. Expand is hidden when the code already fits.
+The host markup carries a checkbox and a label, so the frame grows with no script on either side. Code that already fits gets a plain iframe with no toggle.
 
-![Collapsed](expand-before.png)
+![Collapsed](demo-collapsed.png)
 
-![Expanded](expand-after.png)
+![Expanded](demo-expanded.png)
 
-## Demo page
+## Generated snippet
 
-![Demo harness](demo-page.png)
+![Embed popover](embed-popover.png)
 
 ## Full playground (unchanged chrome)
 

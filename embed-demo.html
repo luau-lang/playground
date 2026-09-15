@@ -3,9 +3,11 @@
   Manual test page for embeds. Served by the dev server at /embed-demo.html and
   not part of the production build, which only bundles index.html.
 
-  Embeds are hosted here the same way a real site would host them: an iframe per
-  playground plus one copy of embed.js, which is what makes the expand button
-  available.
+  Each embed below is the markup the Embed popover generates. Sizing and the
+  expand toggle belong to this page; everything inside the frame belongs to the
+  playground. The toggle is a checkbox and a label, so there is no script here.
+  The generated snippet repeats the .luau-embed rules inline; they are hoisted
+  into one block here so the page stays readable.
 -->
 <html lang="en">
   <head>
@@ -25,47 +27,72 @@
       h2 { font-size: 16px; margin: 36px 0 4px; }
       p { margin: 0 0 12px; font-size: 14px; opacity: 0.75; }
       code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-      iframe {
+      footer { margin-top: 48px; font-size: 13px; opacity: 0.7; }
+
+      /* --- generated snippet styles --- */
+      .luau-embed { position: relative; }
+      .luau-embed iframe {
+        display: block;
         width: 100%;
+        height: var(--luau-collapsed);
         border: 1px solid #d5d7dd;
         border-radius: 8px;
-        display: block;
+        transition: height 150ms ease;
       }
-      footer { margin-top: 48px; font-size: 13px; opacity: 0.7; }
+      .luau-embed-toggle { position: absolute; opacity: 0; pointer-events: none; }
+      .luau-embed-toggle:checked ~ iframe { height: min(var(--luau-expanded), 80vh); }
+      .luau-embed-label { display: inline-block; margin-top: 6px; font-size: 13px; cursor: pointer; }
+      .luau-embed-toggle:focus-visible ~ .luau-embed-label { outline: 2px solid currentColor; outline-offset: 2px; }
+      .luau-embed-toggle:checked ~ .luau-embed-label .luau-embed-more,
+      .luau-embed-toggle:not(:checked) ~ .luau-embed-label .luau-embed-less { display: none; }
     </style>
   </head>
   <body>
     <h1>Embed demo</h1>
     <p>
-      Every embed below points at this same dev server. The expand button only appears
-      because this page loads <code>embed.js</code> at the bottom.
+      Every embed points at this same dev server. Expand is a host-side CSS toggle, so the
+      frame grows in place with no script on either side.
     </p>
 
     <h2>Single file</h2>
-    <p>No tab bar — the controls float over the editor.</p>
-    <iframe
-      src="/?embed=true"
-      height="240"
-      loading="lazy"
-      allow="clipboard-write"
-      title="Single file embed"
-    ></iframe>
+    <p>No tab bar — copy, check, run, and open float over the editor.</p>
+    <div class="luau-embed" style="--luau-collapsed: 240px; --luau-expanded: 358px;">
+      <input class="luau-embed-toggle" id="embed-welcome" type="checkbox" />
+      <iframe
+        src="/?embed=true"
+        loading="lazy"
+        allow="clipboard-write"
+        title="Single file embed"
+      ></iframe>
+      <label class="luau-embed-label" for="embed-welcome">
+        <span class="luau-embed-more">Expand ▾</span>
+        <span class="luau-embed-less">Collapse ▴</span>
+      </label>
+    </div>
 
     <h2>Single file, 40 lines</h2>
-    <p>Taller than its frame, so expand has something to do.</p>
-    <iframe
-      src="/?embed=true#N4IgbiBcBMA0IGMogA4CcCWA7ALgCgB0QAbbAUwAIBGIgSgK3W3yNK0ujoad0JPIoBmLo0y9WAgCwieLfuwoBWGWLltKANhXM+6igHZt4+ZQAcRtQICcF3QKoAGWxIVUaIeqJ0vKVTh+5VO1dhAK9jPSppMNlg32UYoJ9qLUTvE2pDNIj7c2zLVxt8uIpoJ2Lk6HdPWMr-GqSM6FCG9L1oaNachWgEroKOVP6S6CzhyrzxpqKpvUFy2YFBasC2pfrV7spBFs2BoU69ksE+o+TBIbOMwTGrucm7pZnHhUkFhhAAXyA"
-      height="200"
-      loading="lazy"
-      allow="clipboard-write"
-      title="Long single file embed"
-    ></iframe>
+    <p>Well past its collapsed height, and past the <code>80vh</code> cap when expanded.</p>
+    <div class="luau-embed" style="--luau-collapsed: 200px; --luau-expanded: 828px;">
+      <input class="luau-embed-toggle" id="embed-long" type="checkbox" />
+      <iframe
+        src="/?embed=true#N4IgbiBcBMA0IGMogA4CcCWA7ALgCgB0QAbbAUwAIBGIgSgK3W3yNK0ujoad0JPIoBmLo0y9WAgCwieLfuwoBWGWLltKANhXM+6igHZt4+ZQAcRtQICcF3QKoAGWxIVUaIeqJ0vKVTh+5VO1dhAK9jPSppMNlg32UYoJ9qLUTvE2pDNIj7c2zLVxt8uIpoJ2Lk6HdPWMr-GqSM6FCG9L1oaNachWgEroKOVP6S6CzhyrzxpqKpvUFy2YFBasC2pfrV7spBFs2BoU69ksE+o+TBIbOMwTGrucm7pZnHhUkFhhAAXyA"
+        loading="lazy"
+        allow="clipboard-write"
+        title="Long single file embed"
+      ></iframe>
+      <label class="luau-embed-label" for="embed-long">
+        <span class="luau-embed-more">Expand ▾</span>
+        <span class="luau-embed-less">Collapse ▴</span>
+      </label>
+    </div>
 
     <h2>Single file that already fits</h2>
-    <p>Nothing is clipped, so there is no expand button.</p>
+    <p>The generator leaves out the toggle entirely, so the snippet is a bare iframe.</p>
     <iframe
       src="/?embed=true#N4IgbiBcBMA0IGMogA4CcCWA7ALgCgB0QBlACwHs0cACAQywBNqBnAdwFN2ciBKArEAF8gA"
+      width="100%"
       height="160"
+      style="border: 1px solid #d5d7dd; border-radius: 8px;"
       loading="lazy"
       allow="clipboard-write"
       title="Short single file embed"
@@ -73,29 +100,43 @@
 
     <h2>Multiple files</h2>
     <p>Tabs need a bar, so the controls stay in it with text labels.</p>
-    <iframe
-      src="/?embed=true#N4IgbiBcBMA0IDMqgLYEMCWA7AdAGwFc0CoQ8B7AYzTwAICAXDPAZ1oF5aAnAUwEcCGXgAoWlLhgAODHAAU0vLDMbMWASgA6WLZIlLhK1jgDmvHg2EaQAdXJc8AEytrNWXdguGWOFgRTDgAEZYWjhaAGYQgBYQgFYAXxctEHgvfCISSDIqGnomVg5aYHitLQQCLEomciw81RMzCyw0FB5IWhYGPWM1ds7urVoh7nMCLlqAAwAJHjwKEOBm1viAQgmtHiwnbSxyyuratN9-LD8AIx4uFnbF88vE9tOUC65B4YpqOgZyBlzOAAY3kMEHZaAB9EK1bC0J4vNgOchA4ZDb6-OgAak4O2Rm22yN4DDGtVRNA2W1KWAJRLqrGS8XgaFI6Gw6WIIHiQA"
-      height="260"
-      loading="lazy"
-      allow="clipboard-write"
-      title="Multi file embed"
-    ></iframe>
+    <div class="luau-embed" style="--luau-collapsed: 260px; --luau-expanded: 382px;">
+      <input class="luau-embed-toggle" id="embed-multi" type="checkbox" />
+      <iframe
+        src="/?embed=true#N4IgbiBcBMA0IDMqgLYEMCWA7AdAGwFc0CoQ8B7AYzTwAICAXDPAZ1oF5aAnAUwEcCGXgAoWlLhgAODHAAU0vLDMbMWASgA6WLZIlLhK1jgDmvHg2EaQAdXJc8AEytrNWXdguGWOFgRTDgAEZYWjhaAGYQgBYQgFYAXxctEHgvfCISSDIqGnomVg5aYHitLQQCLEomciw81RMzCyw0FB5IWhYGPWM1ds7urVoh7nMCLlqAAwAJHjwKEOBm1viAQgmtHiwnbSxyyuratN9-LD8AIx4uFnbF88vE9tOUC65B4YpqOgZyBlzOAAY3kMEHZaAB9EK1bC0J4vNgOchA4ZDb6-OgAak4O2Rm22yN4DDGtVRNA2W1KWAJRLqrGS8XgaFI6Gw6WIIHiQA"
+        loading="lazy"
+        allow="clipboard-write"
+        title="Multi file embed"
+      ></iframe>
+      <label class="luau-embed-label" for="embed-multi">
+        <span class="luau-embed-more">Expand ▾</span>
+        <span class="luau-embed-less">Collapse ▴</span>
+      </label>
+    </div>
 
     <h2>Multiple files, icon controls</h2>
     <p>Same embed with <code>icons=true</code>.</p>
-    <iframe
-      src="/?embed=true&icons=true#N4IgbiBcBMA0IDMqgLYEMCWA7AdAGwFc0CoQ8B7AYzTwAICAXDPAZ1oF5aAnAUwEcCGXgAoWlLhgAODHAAU0vLDMbMWASgA6WLZIlLhK1jgDmvHg2EaQAdXJc8AEytrNWXdguGWOFgRTDgAEZYWjhaAGYQgBYQgFYAXxctEHgvfCISSDIqGnomVg5aYHitLQQCLEomciw81RMzCyw0FB5IWhYGPWM1ds7urVoh7nMCLlqAAwAJHjwKEOBm1viAQgmtHiwnbSxyyuratN9-LD8AIx4uFnbF88vE9tOUC65B4YpqOgZyBlzOAAY3kMEHZaAB9EK1bC0J4vNgOchA4ZDb6-OgAak4O2Rm22yN4DDGtVRNA2W1KWAJRLqrGS8XgaFI6Gw6WIIHiQA"
-      height="260"
-      loading="lazy"
-      allow="clipboard-write"
-      title="Multi file embed with icon controls"
-    ></iframe>
+    <div class="luau-embed" style="--luau-collapsed: 260px; --luau-expanded: 382px;">
+      <input class="luau-embed-toggle" id="embed-multi-icons" type="checkbox" />
+      <iframe
+        src="/?embed=true&icons=true#N4IgbiBcBMA0IDMqgLYEMCWA7AdAGwFc0CoQ8B7AYzTwAICAXDPAZ1oF5aAnAUwEcCGXgAoWlLhgAODHAAU0vLDMbMWASgA6WLZIlLhK1jgDmvHg2EaQAdXJc8AEytrNWXdguGWOFgRTDgAEZYWjhaAGYQgBYQgFYAXxctEHgvfCISSDIqGnomVg5aYHitLQQCLEomciw81RMzCyw0FB5IWhYGPWM1ds7urVoh7nMCLlqAAwAJHjwKEOBm1viAQgmtHiwnbSxyyuratN9-LD8AIx4uFnbF88vE9tOUC65B4YpqOgZyBlzOAAY3kMEHZaAB9EK1bC0J4vNgOchA4ZDb6-OgAak4O2Rm22yN4DDGtVRNA2W1KWAJRLqrGS8XgaFI6Gw6WIIHiQA"
+        loading="lazy"
+        allow="clipboard-write"
+        title="Multi file embed with icon controls"
+      ></iframe>
+      <label class="luau-embed-label" for="embed-multi-icons">
+        <span class="luau-embed-more">Expand ▾</span>
+        <span class="luau-embed-less">Collapse ▴</span>
+      </label>
+    </div>
 
     <h2>Forced dark, forced light</h2>
     <p><code>theme=dark</code> and <code>theme=light</code> instead of following the system.</p>
     <iframe
       src="/?embed=true&theme=dark"
+      width="100%"
       height="200"
+      style="border: 1px solid #d5d7dd; border-radius: 8px;"
       loading="lazy"
       allow="clipboard-write"
       title="Dark embed"
@@ -103,7 +144,9 @@
     <br />
     <iframe
       src="/?embed=true&theme=light"
+      width="100%"
       height="200"
+      style="border: 1px solid #d5d7dd; border-radius: 8px;"
       loading="lazy"
       allow="clipboard-write"
       title="Light embed"
@@ -111,10 +154,6 @@
 
     <footer>
       Full playground: <a href="/">/</a> — its Embed button generates snippets like these.
-      Delete the <code>embed.js</code> tag at the bottom of this file to see what a site that
-      skips it gets: everything else works, the expand button just never appears.
     </footer>
-
-    <script src="/embed.js" async></script>
   </body>
 </html>

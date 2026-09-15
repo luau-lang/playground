@@ -5,16 +5,12 @@
   import { runCode, checkCode, stopExecution } from '$lib/luau/wasm';
   import { generatePlaygroundUrl } from '$lib/utils/share';
   import { copyText } from '$lib/utils/clipboard';
-  import { hostCanResize, requestHostHeight } from '$lib/stores/embedHost';
-  import { editorScroller } from '$lib/stores/editorViewport';
 
   interface Props {
     /** Show a button that copies the active file to the clipboard. */
     showCopy?: boolean;
     /** Show a button that opens the current state in the full playground. */
     showOpen?: boolean;
-    /** Offer a button that grows the embed to fit the whole file when clipped. */
-    showExpand?: boolean;
     /** Drop text labels and use icons at every breakpoint. */
     iconsOnly?: boolean;
     /** Float the actions over the editor instead of sitting in the tab bar. */
@@ -24,7 +20,6 @@
   let {
     showCopy = false,
     showOpen = false,
-    showExpand = false,
     iconsOnly = false,
     overlay = false,
   }: Props = $props();
@@ -50,66 +45,6 @@
 
   $effect(() => () => {
     if (copyTimer) clearTimeout(copyTimer);
-  });
-
-  // Expanding needs a host page that answered the handshake, and is only worth
-  // offering while the code is actually clipped.
-  const scroller = $derived($editorScroller);
-  let isExpanded = $state(false);
-  let isClipped = $state(false);
-  let requestedHeight = 0;
-
-  const canExpand = $derived(showExpand && $hostCanResize && (isClipped || isExpanded));
-
-  /** Height the embed needs to show the whole file without scrolling. */
-  function fullHeight(): number {
-    if (!scroller) return window.innerHeight;
-    // Everything that isn't the editor viewport: tab bar, output panel, padding
-    const chrome = window.innerHeight - scroller.clientHeight;
-    return Math.ceil(scroller.scrollHeight + chrome);
-  }
-
-  function expandToFit() {
-    const height = fullHeight();
-    // The host echoes the height back as a resize, so ignore the noise
-    if (Math.abs(height - requestedHeight) <= 2) return;
-    requestedHeight = height;
-    requestHostHeight(height);
-  }
-
-  function toggleExpand() {
-    isExpanded = !isExpanded;
-    if (isExpanded) {
-      expandToFit();
-    } else {
-      requestedHeight = 0;
-      requestHostHeight(null);
-    }
-  }
-
-  function measure() {
-    if (!scroller) return;
-    isClipped = scroller.scrollHeight - scroller.clientHeight > 2;
-    if (isExpanded) expandToFit();
-  }
-
-  // Watch the editor viewport and its content: the first changes when chrome
-  // such as the output panel appears, the second when the code itself grows
-  $effect(() => {
-    if (!showExpand || !$hostCanResize || !scroller) return;
-
-    measure();
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(scroller);
-    const content = scroller.querySelector('.cm-content');
-    if (content) observer.observe(content);
-    window.addEventListener('resize', measure);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', measure);
-    };
   });
 
   function handleRun() {
@@ -167,18 +102,6 @@
       aria-label={copySuccess ? 'Copied' : 'Copy code'}
     >
       {@render label(copySuccess ? 'check' : 'copy', copySuccess ? 'Copied!' : 'Copy')}
-    </Button>
-  {/if}
-  {#if canExpand}
-    <Button
-      size="sm"
-      variant="secondary"
-      onclick={toggleExpand}
-      class={buttonClass}
-      title={isExpanded ? 'Collapse' : 'Expand to fit the code'}
-      aria-label={isExpanded ? 'Collapse' : 'Expand to fit the code'}
-    >
-      {@render label(isExpanded ? 'collapse' : 'expand', isExpanded ? 'Collapse' : 'Expand')}
     </Button>
   {/if}
   <Button

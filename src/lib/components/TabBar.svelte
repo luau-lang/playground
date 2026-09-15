@@ -213,12 +213,7 @@
       </Button>
       <EmbedPopover />
     {/if}
-    <CodeActions
-      showCopy={$isEmbed}
-      showExpand={$isEmbed}
-      showOpen={$isEmbed}
-      iconsOnly={$isEmbed && $embedIcons}
-    />
+    <CodeActions showCopy={$isEmbed} showOpen={$isEmbed} iconsOnly={$isEmbed && $embedIcons} />
   </div>
 </header>
 

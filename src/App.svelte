@@ -7,7 +7,6 @@
   import { settings, showBytecode } from '$lib/stores/settings';
   import { files, activeFile } from '$lib/stores/playground';
   import { isEmbed, embedTheme } from '$lib/stores/embed';
-  import { initHostBridge } from '$lib/stores/embedHost';
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { loadLuauWasm } from '$lib/luau/wasm';
   import { parseStateFromHash } from '$lib/utils/decode';
@@ -27,11 +26,6 @@
     url.hash = '';
     window.history.replaceState(null, '', url.toString());
   }
-
-  onMount(() => {
-    if (!$isEmbed) return;
-    return initHostBridge();
-  });
 
   onMount(() => {
     if ($isEmbed) return;
@@ -94,7 +88,7 @@
       <div class="relative min-w-0 min-h-0 overflow-hidden {$showBytecode ? 'h-1/2 md:h-full md:flex-1' : 'h-full w-full'}">
         <Editor />
         {#if overlayActions}
-          <CodeActions overlay showCopy showExpand showOpen />
+          <CodeActions overlay showCopy showOpen />
         {/if}
       </div>
       
