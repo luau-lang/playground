@@ -13,6 +13,7 @@ import share from '@phosphor-icons/core/assets/bold/upload-simple-bold.svg?raw';
 import chevronRight from '@phosphor-icons/core/assets/bold/caret-right-bold.svg?raw';
 import binary from '@phosphor-icons/core/assets/bold/binary-bold.svg?raw';
 import code from '@phosphor-icons/core/assets/bold/code-bold.svg?raw';
+import copy from '@phosphor-icons/core/assets/bold/copy-bold.svg?raw';
 
 export const icons = {
   play,
@@ -29,6 +30,7 @@ export const icons = {
   chevronRight,
   binary,
   code,
+  copy,
 } as const;
 
 export type IconName = keyof typeof icons;
