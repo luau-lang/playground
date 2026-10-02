@@ -12,6 +12,7 @@ import { get } from 'svelte/store';
 import LZString from 'lz-string';
 import { type ShareState, type MinimalShareState } from '$lib/utils/decode';
 import { copyText } from '$lib/utils/clipboard';
+import { buildEmbedSnippet } from '$lib/utils/embedSnippet';
 
 /**
  * Check if settings differ from defaults.
@@ -117,18 +118,6 @@ function fullEmbedHeight(state: ShareState): number {
   return Math.ceil(longest * LINE_HEIGHT + EDITOR_PADDING + tabBar);
 }
 
-function iframeTag(url: URL, sizing: string[] = []): string {
-  return [
-    '<iframe',
-    `  src="${url.toString()}"`,
-    ...sizing,
-    '  loading="lazy"',
-    '  allow="clipboard-write"',
-    '  title="Luau Playground"',
-    '></iframe>',
-  ].join('\n');
-}
-
 /**
  * Generate an iframe embed code snippet for the current playground state.
  *
@@ -138,42 +127,7 @@ function iframeTag(url: URL, sizing: string[] = []): string {
  */
 export function generateEmbedCode(theme: ThemeMode = 'system', icons = false, height = 400): string {
   const url = generateEmbedUrl(theme, icons);
-  const expanded = fullEmbedHeight(currentState());
-
-  if (expanded <= height) {
-    return iframeTag(url, [
-      '  width="100%"',
-      `  height="${height}"`,
-      '  style="border: 1px solid #e2e8f0; border-radius: 8px;"',
-    ]);
-  }
-
-  const id = `luau-embed-${Math.random().toString(36).slice(2, 8)}`;
-  return `<div class="luau-embed" style="--luau-collapsed: ${height}px; --luau-expanded: ${expanded}px;">
-  <input class="luau-embed-toggle" id="${id}" type="checkbox">
-${iframeTag(url).replace(/^/gm, '  ')}
-  <label class="luau-embed-label" for="${id}">
-    <span class="luau-embed-more">Expand \u25be</span>
-    <span class="luau-embed-less">Collapse \u25b4</span>
-  </label>
-</div>
-<style>
-  .luau-embed { position: relative; }
-  .luau-embed iframe {
-    display: block;
-    width: 100%;
-    height: var(--luau-collapsed);
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    transition: height 150ms ease;
-  }
-  .luau-embed-toggle { position: absolute; opacity: 0; pointer-events: none; }
-  .luau-embed-toggle:checked ~ iframe { height: min(var(--luau-expanded), 80vh); }
-  .luau-embed-label { display: inline-block; margin-top: 6px; font-size: 13px; cursor: pointer; }
-  .luau-embed-toggle:focus-visible ~ .luau-embed-label { outline: 2px solid currentColor; outline-offset: 2px; }
-  .luau-embed-toggle:checked ~ .luau-embed-label .luau-embed-more,
-  .luau-embed-toggle:not(:checked) ~ .luau-embed-label .luau-embed-less { display: none; }
-</style>`;
+  return buildEmbedSnippet(url, height, fullEmbedHeight(currentState()));
 }
 
 /**

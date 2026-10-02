@@ -82,6 +82,10 @@ runs:
       shell: bash
       run: npm run check
 
+    - name: Test
+      shell: bash
+      run: npm test
+
     - name: Build
       shell: bash
       run: npx vite build --base=./
