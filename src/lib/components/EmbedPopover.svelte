@@ -2,7 +2,11 @@
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
   import { generateEmbedCode } from '$lib/utils/share';
+  import { DEFAULT_EMBED_HEIGHT } from '$lib/editor/metrics';
   import { copyText } from '$lib/utils/clipboard';
+  import { files, activeFile } from '$lib/stores/playground';
+  import { settings, showBytecode } from '$lib/stores/settings';
+  import { CURRENT_VERSION } from '$lib/constants';
   import { type ThemeMode } from '$lib/utils/theme';
 
   const themeOptions: { value: ThemeMode; label: string }[] = [
@@ -20,7 +24,13 @@
   let useIcons = $state(false);
   let copySuccess = $state(false);
 
-  let embedCode = $derived(generateEmbedCode(selectedTheme, useIcons));
+  let embedCode = $derived(generateEmbedCode(selectedTheme, useIcons, DEFAULT_EMBED_HEIGHT, {
+    files: $files,
+    active: $activeFile,
+    v: CURRENT_VERSION,
+    settings: $settings,
+    showBytecode: $showBytecode,
+  }));
 
   async function handleCopy() {
     copySuccess = await copyText(embedCode);

@@ -12,6 +12,7 @@ import { get } from 'svelte/store';
 import LZString from 'lz-string';
 import { type ShareState, type MinimalShareState } from '$lib/utils/decode';
 import { copyText } from '$lib/utils/clipboard';
+import { DEFAULT_EMBED_HEIGHT, fullEmbedHeight } from '$lib/editor/metrics';
 import { buildEmbedSnippet } from '$lib/utils/embedSnippet';
 
 /**
@@ -92,10 +93,9 @@ export function generatePlaygroundUrl(): URL {
 /**
  * Generate an embed URL for the current playground state.
  */
-export function generateEmbedUrl(theme: ThemeMode = 'system', icons = false): URL {
+export function generateEmbedUrl(theme: ThemeMode = 'system', icons = false, state: ShareState = currentState()): URL {
   if (typeof window === 'undefined') return new URL('https://play.luau.org/');
 
-  const state = currentState();
   const url = new URL(window.location.origin + window.location.pathname);
   url.searchParams.set('embed', 'true');
   if (theme !== 'system') url.searchParams.set('theme', theme);
@@ -104,19 +104,6 @@ export function generateEmbedUrl(theme: ThemeMode = 'system', icons = false): UR
   return url;
 }
 
-// Editor metrics, mirroring the CodeMirror theme in `editor/setup.ts`: a 14px
-// font at CodeMirror's 1.4 line height, inside 12px of vertical padding.
-const LINE_HEIGHT = 19.6;
-const EDITOR_PADDING = 24;
-const TAB_BAR_HEIGHT = 44;
-
-/** Height an embed of this state needs before its code starts scrolling. */
-function fullEmbedHeight(state: ShareState): number {
-  const contents = Object.values(state.files);
-  const longest = Math.max(...contents.map((content) => content.split('\n').length));
-  const tabBar = contents.length > 1 ? TAB_BAR_HEIGHT : 0;
-  return Math.ceil(longest * LINE_HEIGHT + EDITOR_PADDING + tabBar);
-}
 
 /**
  * Generate an iframe embed code snippet for the current playground state.
@@ -125,9 +112,13 @@ function fullEmbedHeight(state: ShareState): number {
  * frame's size. When the code does not fit in `height`, the snippet carries its
  * own expand toggle — a checkbox and a label, so no script is involved.
  */
-export function generateEmbedCode(theme: ThemeMode = 'system', icons = false, height = 400): string {
-  const url = generateEmbedUrl(theme, icons);
-  return buildEmbedSnippet(url, height, fullEmbedHeight(currentState()));
+export function generateEmbedCode(
+  theme: ThemeMode = 'system',
+  icons = false,
+  height = DEFAULT_EMBED_HEIGHT,
+  state: ShareState = currentState(),
+): string {
+  return buildEmbedSnippet(generateEmbedUrl(theme, icons, state), height, fullEmbedHeight(state.files));
 }
 
 /**
