@@ -9,6 +9,7 @@
     disabled?: boolean;
     type?: 'button' | 'submit' | 'reset';
     title?: string;
+    'aria-label'?: string;
     onclick?: (e: MouseEvent) => void;
     children?: import('svelte').Snippet;
     popovertarget?: string;

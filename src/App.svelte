@@ -1,5 +1,6 @@
 <script lang="ts">
   import TabBar from '$lib/components/TabBar.svelte';
+  import CodeActions from '$lib/components/CodeActions.svelte';
   import Editor from '$lib/components/Editor.svelte';
   import Output from '$lib/components/Output.svelte';
   import BytecodeView from '$lib/components/BytecodeView.svelte';
@@ -14,6 +15,10 @@
   import { onMount } from 'svelte';
 
   let mounted = $state(false);
+
+  // A single-file embed has nothing to put in a tab bar, so the actions float
+  // over the editor instead.
+  const overlayActions = $derived($isEmbed && Object.keys($files).length === 1);
 
   function clearUrlHash(): void {
     if (!window.location.hash) return;
@@ -71,15 +76,20 @@
 </script>
 
 <div class="flex flex-col h-full bg-(--bg-primary) overflow-hidden">
-  <TabBar />
+  {#if !overlayActions}
+    <TabBar />
+  {/if}
   
   <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
     <!-- Editor area (split when bytecode view is open) -->
     <!-- Vertical split on mobile, horizontal on desktop -->
     <div class="flex-1 min-h-0 overflow-hidden flex {$showBytecode ? 'flex-col md:flex-row' : ''}">
       <!-- Editor - takes remaining space -->
-      <div class="min-w-0 min-h-0 overflow-hidden {$showBytecode ? 'h-1/2 md:h-full md:flex-1' : 'h-full w-full'}">
+      <div class="relative min-w-0 min-h-0 overflow-hidden {$showBytecode ? 'h-1/2 md:h-full md:flex-1' : 'h-full w-full'}">
         <Editor />
+        {#if overlayActions}
+          <CodeActions overlay showCopy showOpen />
+        {/if}
       </div>
       
       <!-- Bytecode panel (when visible) - max min(50%, 64ch) on desktop -->

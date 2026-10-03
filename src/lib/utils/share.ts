@@ -11,6 +11,9 @@ import { defaultSettings, CURRENT_VERSION, DEFAULT_FILENAME } from '$lib/constan
 import { get } from 'svelte/store';
 import LZString from 'lz-string';
 import { type ShareState, type MinimalShareState } from '$lib/utils/decode';
+import { copyText } from '$lib/utils/clipboard';
+import { DEFAULT_EMBED_HEIGHT, fullEmbedHeight } from '$lib/editor/metrics';
+import { buildEmbedSnippet } from '$lib/utils/embedSnippet';
 
 /**
  * Check if settings differ from defaults.
@@ -68,51 +71,54 @@ export function encodeState(state: ShareState): string {
   return LZString.compressToEncodedURIComponent(json);
 }
 
-/**
- * Generate a playground URL with encoded state.
- */
-export function generatePlaygroundUrl(): URL {
-  const state: ShareState = {
+function currentState(): ShareState {
+  return {
     files: get(files),
     active: get(activeFile),
     v: CURRENT_VERSION,
     settings: get(settings),
     showBytecode: get(showBytecode),
   };
-  
+}
+
+/**
+ * Generate a playground URL with encoded state.
+ */
+export function generatePlaygroundUrl(): URL {
   const url = new URL(window.location.origin + window.location.pathname);
-  const encoded = encodeState(state);
-  url.hash = encoded;
+  url.hash = encodeState(currentState());
   return url;
 }
 
 /**
  * Generate an embed URL for the current playground state.
  */
-export function generateEmbedUrl(theme: ThemeMode = 'system'): URL {
+export function generateEmbedUrl(theme: ThemeMode = 'system', icons = false, state: ShareState = currentState()): URL {
   if (typeof window === 'undefined') return new URL('https://play.luau.org/');
-
-  const state: ShareState = {
-    files: get(files),
-    active: get(activeFile),
-    v: CURRENT_VERSION,
-    settings: get(settings),
-    showBytecode: get(showBytecode),
-  };
 
   const url = new URL(window.location.origin + window.location.pathname);
   url.searchParams.set('embed', 'true');
   if (theme !== 'system') url.searchParams.set('theme', theme);
+  if (icons) url.searchParams.set('icons', 'true');
   url.hash = encodeState(state);
   return url;
 }
 
+
 /**
  * Generate an iframe embed code snippet for the current playground state.
+ *
+ * The playground owns what happens inside the frame; the host page owns the
+ * frame's size. When the code does not fit in `height`, the snippet carries its
+ * own expand toggle — a checkbox and a label, so no script is involved.
  */
-export function generateEmbedCode(theme: ThemeMode = 'system', height = '400px'): string {
-  const url = generateEmbedUrl(theme);
-  return `<iframe\n  src="${url.toString()}"\n  width="100%"\n  height="${height}"\n  style="border: 1px solid #e2e8f0; border-radius: 8px;"\n  loading="lazy"\n  allow="clipboard-write"\n  title="Luau Playground"\n></iframe>`;
+export function generateEmbedCode(
+  theme: ThemeMode = 'system',
+  icons = false,
+  height = DEFAULT_EMBED_HEIGHT,
+  state: ShareState = currentState(),
+): string {
+  return buildEmbedSnippet(generateEmbedUrl(theme, icons, state), height, fullEmbedHeight(state.files));
 }
 
 /**
@@ -121,12 +127,9 @@ export function generateEmbedCode(theme: ThemeMode = 'system', height = '400px')
 export async function sharePlayground(): Promise<boolean> {
   const url = generatePlaygroundUrl();
 
-  try {
-    await navigator.clipboard.writeText(url.toString());
-    return true;
-  } catch {
-    // Fallback: update URL in address bar
-    window.history.replaceState(null, '', url.toString());
-    return false;
-  }
+  if (await copyText(url.toString())) return true;
+
+  // Fallback: update URL in address bar
+  window.history.replaceState(null, '', url.toString());
+  return false;
 }

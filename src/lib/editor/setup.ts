@@ -18,6 +18,7 @@ import { darkTheme, lightTheme } from './themes';
 import { luauLspExtensions } from './lspExtensions';
 import { luauEnterKeymap, luauIndentation } from './luauBlocks';
 import { forceLinting, lintGutter } from '@codemirror/lint';
+import { EDITOR_FONT_SIZE, EDITOR_LINE_HEIGHT, EDITOR_PADDING_Y } from './metrics';
 import { themeMode } from '$lib/utils/theme';
 import { cursorLine, isRunning } from '$lib/stores/playground';
 import { runCode, stopExecution } from '$lib/luau/wasm';
@@ -91,14 +92,15 @@ function createExtensions(onChange: (content: string) => void): Extension[] {
     EditorView.theme({
       '&': {
         height: '100%',
-        fontSize: '14px',
+        fontSize: `${EDITOR_FONT_SIZE}px`,
       },
       '.cm-scroller': {
         fontFamily: 'var(--font-mono)',
+        lineHeight: String(EDITOR_LINE_HEIGHT),
         overflow: 'auto',
       },
       '.cm-content': {
-        padding: '12px 0',
+        padding: `${EDITOR_PADDING_Y}px 0`,
       },
     }),
     
