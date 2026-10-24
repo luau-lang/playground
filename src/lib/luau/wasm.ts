@@ -24,14 +24,15 @@ const STOPPED_ERROR = 'Execution stopped';
 const CANCELLED_ERROR = 'Cancelled';
 const ROBLOX_PC_STUDIO_FLAGS_URL = 'https://clientsettingscdn.roblox.com/v1/settings/application?applicationName=PCStudioApp';
 const ROBLOX_FAST_FLAG_KINDS = ['FFlag', 'FInt', 'DFFlag', 'DFInt'] as const;
+const ROBLOX_ENABLED_LINTS_FLAG = 'FStringStudioLuauLints';
 
 // Convert LuauMode to numeric value for WASM
 const modeToNum = (mode: LuauMode): number =>
   mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
 
-let robloxStudioFlagPayloadPromise: Promise<string | null> | null = null;
+let robloxStudioFlagPayloadPromise: Promise<{ flags: string | null; lints: string | null; }> | null = null;
 
-async function getRobloxStudioFlagPayload(): Promise<string | null> {
+async function getRobloxStudioFlagPayload(): Promise<{ flags: string | null; lints: string | null; }> {
   if (!robloxStudioFlagPayloadPromise) {
     robloxStudioFlagPayloadPromise = fetch(ROBLOX_PC_STUDIO_FLAGS_URL)
       .then((response) => response.json())
@@ -47,11 +48,16 @@ async function getRobloxStudioFlagPayload(): Promise<string | null> {
           }
         }
 
-        return lines.length > 0 ? lines.join('\n') : null;
+        const enabledLints = (applicationSettings ?? {})[ROBLOX_ENABLED_LINTS_FLAG];
+
+        return {
+          flags: lines.length > 0 ? lines.join('\n') : null,
+          lints: enabledLints ? enabledLints : null,
+        };
       })
       .catch((error) => {
         console.warn('[Luau] Failed to sync Roblox Studio Luau flags:', error);
-        return null;
+        return { flags: null, lints: null, };
       });
   }
 
@@ -275,14 +281,15 @@ async function loadAnalysisWorker(): Promise<void> {
 
   return loadWorker(analysis, 'Analysis', {
     postInit: async () => {
-      const robloxStudioFlags = await robloxStudioFlagsPromise;
-      if (robloxStudioFlags) {
-        await sendToWorker(analysis, 'setFFlags', { serializedFlags: robloxStudioFlags });
+      const robloxStudioFlagsPayload = await robloxStudioFlagsPromise;
+      if (robloxStudioFlagsPayload.flags) {
+        await sendToWorker(analysis, 'setFFlags', { serializedFlags: robloxStudioFlagsPayload.flags });
       }
 
       const currentSettings = get(settings);
       await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });
       await sendToWorker(analysis, 'setSolver', { isNew: currentSettings.solver === 'new' });
+      await sendToWorker(analysis, 'setLints', { serializedLints: currentSettings.lints.join(',') });
       initSettingsSync();
     }
   });
@@ -313,9 +320,9 @@ async function loadExecutionWorker(): Promise<void> {
   return loadWorker(execution, 'Execution', {
     checkTerminated: true,
     postInit: async () => {
-      const robloxStudioFlags = await robloxStudioFlagsPromise;
-      if (robloxStudioFlags) {
-        await sendToWorker(execution, 'setFFlags', { serializedFlags: robloxStudioFlags });
+      const robloxStudioFlagsPayload = await robloxStudioFlagsPromise;
+      if (robloxStudioFlagsPayload.flags) {
+        await sendToWorker(execution, 'setFFlags', { serializedFlags: robloxStudioFlagsPayload.flags });
       }
 
       const currentSettings = get(settings);
@@ -443,6 +450,19 @@ export async function getAvailableModules(): Promise<string[]> {
 }
 
 /**
+ * Get list of all Luau lints.
+ */
+export async function getLints(): Promise<string[]> {
+  try {
+    const response = await sendAnalysisRequest('getLints', {});
+    return response.result.lints;
+  } catch (error) {
+    console.error('[Luau] Failed to get availabe lints:', error);
+    return [];
+  }
+}
+
+/**
  * Set the type checking mode on the analysis worker.
  */
 export async function setLuauMode(mode: LuauMode): Promise<void> {
@@ -472,6 +492,17 @@ export async function setLuauSolver(solver: SolverMode): Promise<void> {
   }
 }
 
+/**
+ * Set enabled lints on the analysis worker.
+ */
+export async function setLints(lints: string): Promise<void> {
+  try {
+    await sendAnalysisRequest('setLints', { serializedLints: lints });
+  } catch(error) {
+    console.log('[Luau] Failed to set enabled lints:', error);
+  }
+}
+
 // Subscribe to settings changes and sync to WASM
 let settingsUnsubscribe: (() => void) | null = null;
 
@@ -482,6 +513,7 @@ export function initSettingsSync(): void {
     if (analysis.ready) {
       await setLuauMode(newSettings.mode);
       await setLuauSolver(newSettings.solver);
+      await setLints(newSettings.lints.join(','));
     }
   });
 }
@@ -597,7 +629,7 @@ export async function checkCode(): Promise<void> {
       for (const diag of diagnostics) {
         const location = `${fileName}:${diag.startLine + 1}:${diag.startCol + 1}`;
         const type = diag.severity === 'error' ? 'error' : diag.severity === 'warning' ? 'warn' : 'log';
-        appendOutput({ type, text: `${location}: ${diag.message}` });
+        appendOutput({ type, text: `${location}: ${diag.type}: ${diag.message}` });
       }
     }
   } catch (error) {

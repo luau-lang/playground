@@ -16,6 +16,8 @@ export interface PlaygroundSettings {
   // Type checking
   mode: LuauMode;
   solver: SolverMode;
+  // Lints
+  lints: number[];
   // Compiler options
   optimizationLevel: OptimizationLevel;
   debugLevel: DebugLevel;
@@ -111,6 +113,7 @@ function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings
   return {
     mode: partial.mode ?? defaultSettings.mode,
     solver: partial.solver ?? defaultSettings.solver,
+    lints: partial.lints ?? defaultSettings.lints,
     optimizationLevel: partial.optimizationLevel ?? defaultSettings.optimizationLevel,
     debugLevel: partial.debugLevel ?? defaultSettings.debugLevel,
     outputFormat: partial.outputFormat ?? defaultSettings.outputFormat,
@@ -180,6 +183,21 @@ export function setMode(mode: LuauMode): void {
 
 export function setSolver(solver: SolverMode): void {
   settings.update((s) => ({ ...s, solver }));
+}
+
+export function enableLint(lint: number): void {
+  settings.update((s) => {
+    if (!s.lints.includes(lint)) {
+      s.lints.push(lint);
+    }
+    return s;
+  });
+}
+
+export function disableLint(lint: number): void {
+  settings.update((s) => (
+    { ...s, lints: s.lints.filter((v) => (v !== lint)) }
+  ));
 }
 
 export function setOptimizationLevel(level: OptimizationLevel): void {

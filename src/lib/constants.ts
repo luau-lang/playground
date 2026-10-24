@@ -5,6 +5,7 @@ import { type PlaygroundSettings } from '$lib/stores/settings';
 export const defaultSettings: PlaygroundSettings = {
   mode: 'strict',
   solver: 'new',
+  lints: [],
   optimizationLevel: 1,
   debugLevel: 1,
   outputFormat: 0,

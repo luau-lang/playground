@@ -3,6 +3,8 @@
     settings, 
     setMode, 
     setSolver, 
+    enableLint,
+    disableLint,
     setOptimizationLevel,
     setDebugLevel,
     setCompilerRemarks,
@@ -16,6 +18,8 @@
     type OutputFormat,
     type KeybindingMode
   } from '$lib/stores/settings';
+  import { onMount } from 'svelte';
+  import { getLints } from "$lib/luau/wasm";
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
 
@@ -66,6 +70,52 @@
     setTimeout(() => refreshDiagnostics(), 50);
   }
 
+  // Handle lints
+  let allLintOptions: Promise<{ label: string, code: number }[]> | null = null;
+
+  async function getAllLintOptions(): Promise<{ label: string, code: number }[]> {
+    if (!allLintOptions) {
+      const lintOptions: { label: string, code: number }[] = [];
+      const response = await getLints();
+
+      response.forEach((lintName, index) => {
+        const lintCode = index + 1;
+        lintOptions.push({
+          label: lintName,
+          code: lintCode,
+        });
+      })
+
+      return lintOptions;
+    }
+
+    return allLintOptions;
+  }
+
+  async function handleSetLintEnabled(lintCode: number, setEnabled: boolean) {
+    if (setEnabled) enableLint(lintCode);
+    else disableLint(lintCode);
+
+    const { refreshDiagnostics } = await import('$lib/editor/setup');
+    setTimeout(() => refreshDiagnostics(), 50);
+  }
+
+  async function handleSetAllLintsEnabled(setEnabled: boolean) {
+    if (!allLintOptions) return;
+    const options = await allLintOptions;
+    const lintSetter = setEnabled ? enableLint : disableLint;
+    for (const { code } of options) {
+      lintSetter(code);
+    }
+
+    const { refreshDiagnostics } = await import('$lib/editor/setup');
+    setTimeout(() => refreshDiagnostics(), 50);
+  }
+
+  onMount(() => {
+    allLintOptions = getAllLintOptions();
+  });
+
   let popoverEl: HTMLElement;
 </script>
 
@@ -88,7 +138,7 @@
   <div class="space-y-4">
     <div>
       <h3 class="text-sm font-semibold text-(--text-primary) mb-1">Settings</h3>
-      <p class="text-xs text-(--text-muted)">Configure editor, type checking, and compiler</p>
+      <p class="text-xs text-(--text-muted)">Configure editor, type checking, lints, and compiler</p>
     </div>
 
     <!-- Type Checking Section -->
@@ -221,6 +271,60 @@
 
     <div class="border-t border-(--border-color)"></div>
 
+    <!-- Lints Section -->
+    <div class="space-y-3">
+      <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Lints</span>
+
+      <!-- Enabled Lints -->
+      <div class="space-y-1.5">
+        <span class="text-xs text-(--text-muted)">Enabled Lints</span>
+
+        <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-1">
+          {#if allLintOptions}
+            {#await allLintOptions}
+              <p class="text-xs text-(--text-secondary)">Loading lint options...</p>
+            {:then lintOptions}
+              {@const currentLints = $settings.lints}
+
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={lintOptions.every((l) => (currentLints.includes(l.code)))}
+                  onchange={(e) => handleSetAllLintsEnabled(e.currentTarget.checked)}
+                  class="w-4 h-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+                />
+                <span class="text-xs text-(--text-secondary)">All lints enabled</span>
+              </label>
+
+              <div class="border-t border-(--border-color)"></div>
+
+              <div class="overflow-y-auto space-y-1">
+                {#each lintOptions as option (option.code)}
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={currentLints.includes(option.code)}
+                      onchange={(e) => handleSetLintEnabled(option.code, e.currentTarget.checked)}
+                      class="w-4 h-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+                    />
+                    <span class="text-xs text-(--text-secondary)">
+                      {option.label} (<a class="text-link" href={`https://luau.org/lint/#${option.label.toLowerCase()}-${option.code}`}>{option.code}</a>)
+                    </span>
+                  </label>
+                {/each}
+              </div>
+            {:catch getError}
+              <p class="text-xs text-red-500">Failed to load options. {getError}</p>
+            {/await}
+          {:else}
+            <p class="text-xs text-red-500">Failed to load options.</p>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-(--border-color)"></div>
+
     <!-- Editor Section -->
     <div class="space-y-3">
       <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Editor</span>
@@ -246,6 +350,11 @@
 <style>
   :global(.config-trigger) {
     anchor-name: --config-trigger;
+  }
+
+  .text-link {
+    color: var(--color-accent-500);
+    text-decoration: underline;
   }
 
   .config-popover {

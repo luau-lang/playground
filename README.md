@@ -88,6 +88,7 @@ v2:
 - `s`: Optional and partial (all properties are optional) compiler/type-checking settings
   - `mode`: `"strict"` | `"nonstrict"` | `"nocheck"`
   - `solver`: `"new"` | `"old"`
+  - `lints`: `number[]` e.g. -> `[1,2,3,4]`
   - `optimizationLevel`: `0` | `1` | `2`
   - `debugLevel`: `0` | `1` | `2`
   - `compilerRemarks`: `boolean`

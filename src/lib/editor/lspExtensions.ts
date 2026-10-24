@@ -46,6 +46,7 @@ function createLuauLinter() {
         diagnostics.push({
           from: Math.max(0, from),
           to: Math.max(from, to),
+          source: `${d.type} (${d.code < 1000 ? "Lint" : "Error"} ${d.code})`,
           severity: d.severity === 'error' ? 'error' : d.severity === 'warning' ? 'warning' : 'info',
           message: d.message,
         });
