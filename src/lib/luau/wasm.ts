@@ -311,7 +311,7 @@ async function loadAnalysisWorker(): Promise<void> {
     },
     onError: (err: Error) => {
       // Reject lints promise to display loading errors
-      rejectGetAllLints(`${err.message}: "${err.cause ?? 'Undefined cause'}"`)
+      rejectGetAllLints(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
     }
   });
 }
