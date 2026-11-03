@@ -1,3 +1,5 @@
+// NOTE: This module imports values from 'lib/luau/wasm.ts' which creates a *cyclic dependency*.
+
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import { STORAGE_KEY, UI_STORAGE_KEY, KEYBINDINGS_STORAGE_KEY, defaultSettings } from '$lib/constants';

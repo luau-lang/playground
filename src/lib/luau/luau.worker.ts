@@ -189,7 +189,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
       case 'setLints': {
         const module = await loadModule();
         module.ccall("luau_set_lints", null, ['string'], [request.serializedLints]);
-        respond(requestId, { type: 'setLints', success: true })
+        respond(requestId, { type: 'setLints', success: true });
         break;
       }
       

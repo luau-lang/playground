@@ -275,7 +275,10 @@
             </div>
           {:else}
             <p class="text-xs text-(--text-secondary)">No available lint options were found.</p>
-          {/if} {/await}
+          {/if} {:catch error}
+            <p class="text-xs text-red-500">Failed to fetch Luau lint options!</p>
+            <p class="text-xs text-(--text-secondary)">{error}</p>
+          {/await}
         </div>
       </div>
     </div>

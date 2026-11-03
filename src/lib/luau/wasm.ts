@@ -6,6 +6,8 @@
  * - Execution worker (on-demand): code execution - can be terminated for infinite loops
  */
 
+// NOTE: This module imports values from 'lib/stores/settings.ts' which creates a *cyclic dependency*.
+
 import { appendOutput, clearOutput, setRunning, setExecutionTime, getActiveFileContent, activeFile, getAllFiles } from '$lib/stores/playground';
 import { settings, type LuauMode, type SolverMode } from '$lib/stores/settings';
 import { get } from 'svelte/store';
@@ -61,8 +63,11 @@ async function getRobloxStudioFlagPayload(): Promise<string | null> {
 
 // Promise for getting all lints to use in GUI and settings
 let resolveGetAllLints: (value: LuauLint[]) => void;
-export const getAllLints = new Promise<LuauLint[]>((resolve) => {
+let rejectGetAllLints: (reason?: any) => void;
+
+export const getAllLints = new Promise<LuauLint[]>((resolve, reject) => {
   resolveGetAllLints = resolve;
+  rejectGetAllLints = reject;
 });
 
 // Compiled WASM module - shared with workers to avoid recompilation
@@ -224,6 +229,7 @@ async function loadWorker(
   options?: { 
     checkTerminated?: boolean;
     postInit?: () => Promise<void>;
+    onError?: (reason: Error) => void;
   }
 ): Promise<void> {
   if (manager.ready && manager.worker) {
@@ -234,7 +240,7 @@ async function loadWorker(
     return manager.readyPromise;
   }
 
-  const { checkTerminated = false, postInit } = options ?? {};
+  const { checkTerminated = false, postInit, onError } = options ?? {};
 
   manager.readyPromise = (async () => {
     try {
@@ -260,11 +266,13 @@ async function loadWorker(
     } catch (error) {
       manager.readyPromise = null;
       manager.ready = false;
-      
-      if (error instanceof Error && error.message === STOPPED_ERROR) {
-        throw error;
-      }
-      throw new Error(`Failed to load ${name.toLowerCase()} worker`, { cause: error });
+
+      const toThrow = (error instanceof Error && error.message === STOPPED_ERROR) ? error
+        : new Error(`Failed to load ${name.toLowerCase()} worker`, { cause: error });
+
+      onError?.(toThrow);
+
+      throw toThrow;
     }
   })();
 
@@ -300,6 +308,10 @@ async function loadAnalysisWorker(): Promise<void> {
       await sendToWorker(analysis, 'setSolver', { isNew: currentSettings.solver === 'new' });
       await sendToWorker(analysis, 'setLints', { serializedLints: currentLints.join(',') });
       initSettingsSync();
+    },
+    onError: (err: Error) => {
+      // Reject lints promise to display loading errors
+      rejectGetAllLints(`${err.message}: "${err.cause ?? 'Undefined cause'}"`)
     }
   });
 }
