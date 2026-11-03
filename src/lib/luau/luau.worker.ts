@@ -11,6 +11,7 @@ import type {
   DiagnosticsResult, 
   AutocompleteResult, 
   HoverResult,
+  LintsResult,
   CreateLuauModule 
 } from './types';
 import createLuauModuleFactory from './luau-module.js';
@@ -31,6 +32,8 @@ export type WorkerRequest =
   | { type: 'getModules' }
   | { type: 'setMode'; mode: number }
   | { type: 'setSolver'; isNew: boolean }
+  | { type: 'setLints'; serializedLints: string }
+  | { type: 'getLints' }
   | { type: 'setFFlags'; serializedFlags: string }
   | { type: 'getBytecode'; code: string; optimizationLevel: number; debugLevel: number; outputFormat: number; showRemarks: boolean }
   | { type: 'registerModules'; modules: Record<string, string> }
@@ -45,6 +48,8 @@ export type WorkerResponse =
   | { type: 'getModules'; result: { modules: string[] } }
   | { type: 'setMode'; success: boolean }
   | { type: 'setSolver'; success: boolean }
+  | { type: 'setLints'; success: boolean }
+  | { type: 'getLints'; result: LintsResult }
   | { type: 'setFFlags'; success: boolean }
   | { type: 'getBytecode'; result: { success: boolean; bytecode: string; error?: string } }
   | { type: 'registerModules'; success: boolean }
@@ -180,7 +185,22 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
         respond(requestId, { type: 'setSolver', success: true });
         break;
       }
-
+      
+      case 'setLints': {
+        const module = await loadModule();
+        module.ccall("luau_set_lints", null, ['string'], [request.serializedLints]);
+        respond(requestId, { type: 'setLints', success: true });
+        break;
+      }
+      
+      case 'getLints': {
+        const module = await loadModule();
+        const resultJson = module.ccall("luau_get_lints", 'string', [], []);
+        const result = JSON.parse(resultJson) as LintsResult;
+        respond(requestId, { type: 'getLints', result });
+        break;
+      }
+      
       case 'setFFlags': {
         const module = await loadModule();
         module.ccall('luau_set_fflags', null, ['string'], [request.serializedFlags]);

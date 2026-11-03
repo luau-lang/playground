@@ -11,6 +11,7 @@ wasm/luau/
 # IDE
 .idea/
 .vscode/
+.zed/
 *.swp
 *.swo
 

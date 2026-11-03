@@ -1,7 +1,10 @@
+// NOTE: This module imports values from 'lib/luau/wasm.ts' which creates a *cyclic dependency*.
+
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import { STORAGE_KEY, UI_STORAGE_KEY, KEYBINDINGS_STORAGE_KEY, defaultSettings } from '$lib/constants';
 import { detectEmbedMode } from '$lib/stores/embed';
+import { getAllLints } from '$lib/luau/wasm';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -16,6 +19,8 @@ export interface PlaygroundSettings {
   // Type checking
   mode: LuauMode;
   solver: SolverMode;
+  // Lints
+  lints: number[] | "all";
   // Compiler options
   optimizationLevel: OptimizationLevel;
   debugLevel: DebugLevel;
@@ -111,6 +116,7 @@ function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings
   return {
     mode: partial.mode ?? defaultSettings.mode,
     solver: partial.solver ?? defaultSettings.solver,
+    lints: partial.lints ?? defaultSettings.lints,
     optimizationLevel: partial.optimizationLevel ?? defaultSettings.optimizationLevel,
     debugLevel: partial.debugLevel ?? defaultSettings.debugLevel,
     outputFormat: partial.outputFormat ?? defaultSettings.outputFormat,
@@ -180,6 +186,31 @@ export function setMode(mode: LuauMode): void {
 
 export function setSolver(solver: SolverMode): void {
   settings.update((s) => ({ ...s, solver }));
+}
+
+export async function enableLint(lint: number | 'all'): Promise<void> {
+  const allLints = await getAllLints;
+  settings.update((s) => {
+    if (lint === 'all') return { ...s, lints: 'all' }; // Enable all
+
+    // Guard clause against duplicates
+    if (s.lints === 'all' || s.lints.includes(lint)) return s;
+
+    // Set to 'all' if all lints have been individually enabled
+    return { ...s, lints: s.lints.length + 1 >= allLints.length ? 'all' : [...s.lints, lint] };
+  });
+}
+
+export async function disableLint(lint: number | 'all'): Promise<void> {
+  const allLints = await getAllLints;
+  settings.update((s) => {
+    if (lint === 'all') return { ...s, lints: [] }; // Disable all
+
+    // Get desired lints array
+    const lintsArray = s.lints === 'all' ? allLints.map(v => v.code) : s.lints;
+
+    return { ...s, lints: lintsArray.filter(v => v !== lint) };
+  });
 }
 
 export function setOptimizationLevel(level: OptimizationLevel): void {

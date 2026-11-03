@@ -24,15 +24,13 @@ The build script will:
 1. Clone the Luau source if not present
 2. Configure with CMake using Emscripten
 3. Build the WASM module
-4. Copy output to `../static/wasm/`
+4. Copy output to `../public/wasm/`
 
 ## Exported Functions
 
 ### Execution
 
 - `luau_execute(code: string)` - Execute Luau code, returns JSON with output and any errors
-- `luau_compile(code: string)` - Compile code to bytecode (for validation)
-- `luau_reset()` - Reset the execution state
 
 ### Analysis
 
@@ -40,10 +38,26 @@ The build script will:
 - `luau_autocomplete(code: string, line: number, col: number)` - Get completion suggestions
 - `luau_hover(code: string, line: number, col: number)` - Get type info for hover
 - `luau_signature_help(code: string, line: number, col: number)` - Get function signatures
+- `luau_get_lints()` - Get a list of all lints
 
-### Utility
+### Configuration
 
-- `luau_version()` - Get the Luau version string
+- `luau_set_solver(useNew: boolean)` - Switch between the old or new solver
+- `luau_set_mode(mode: number)` - Set the type checking mode between non-strict (0), strict (1) and no-check (2)
+- `luau_set_lints(serializedLints: string)` - Enable lints serialized as lint codes separated by commas
+- `luau_set_fflags(serializedFlags: string)` - Apply Luau fast flags/ints serialized as newline-delimited `"Name=Value"` entries
+
+### Modules
+
+- `luau_add_module(name: string, source: string)` - Add a module that can be required
+- `luau_clear_modules()` - Clear all modules
+- `luau_get_modules()` - Get list of available modules for autocomplete
+- `luau_set_source(name: string, source: string)` - Set source for a file
+- `luau_clear_sources()` - Clear all analysis sources and analysis-side module names
+
+### Bytecode
+
+- `luau_dump_bytecode(code: string, optimizationLevel: number, debugLevel: number, outputFormat: number, showRemarks: boolean)` - Dump bytecode as human-readable text, is able to dump VM, IR, x64 and arm64 bytecode depending on `outputFormat`
 
 ## Output Format
 
@@ -56,8 +70,16 @@ All functions return JSON strings. Example responses:
 
 // luau_get_diagnostics
 { "diagnostics": [
-  { "severity": "error", "message": "...", "startLine": 0, "startCol": 0, "endLine": 0, "endCol": 5 }
-]}
+    {
+      "kind": "error", "type": "SyntaxError", "severity": "error", "moduleName": "main", "code": 1014, "message": "...",
+      "startLine": 0, "startCol": 0, "endLine": 0, "endCol": 5
+    },
+    {
+      "kind": "lint", "type": "DeprecatedGlobal", "severity": "warning", "code": 2, "message": "...",
+      "startLine": 0, "startCol": 0, "endLine": 0, "endCol": 5
+    }
+  ]
+}
 
 // luau_autocomplete
 { "items": [
@@ -66,5 +88,14 @@ All functions return JSON strings. Example responses:
 
 // luau_hover
 { "content": "```luau\nprint: (string) -> ()\n```" }
-```
 
+// luau_get_lints
+{ "lints": [{ "name": "UnknownGlobal", "code": 1 }, { "name": "DeprecatedGlobal", "code": 2 }, ...] }
+
+// luau_get_modules
+{ "modules": ["module1", "module2", "someModule"] }
+
+// luau_dump_bytecode
+{ "success": true, "bytecode": "..." }
+{ "success": false, "bytecode": "", "error": "Incomplete statement: ..." }
+```

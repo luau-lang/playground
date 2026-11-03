@@ -5,6 +5,9 @@
 import type { LuauValue } from '$lib/utils/output';
 
 export interface LuauDiagnostic {
+  kind: 'error' | 'lint';
+  type: string;
+  code: number;
   severity: 'error' | 'warning' | 'info';
   message: string;
   moduleName?: string;
@@ -19,6 +22,11 @@ export interface LuauCompletion {
   kind: 'function' | 'variable' | 'property' | 'keyword' | 'constant' | 'type' | 'module';
   detail?: string;
   deprecated: boolean;
+}
+
+export interface LuauLint {
+  name: string;
+  code: number;
 }
 
 export interface ExecuteResult {
@@ -51,6 +59,10 @@ export interface SignatureResult {
   }>;
 }
 
+export interface LintsResult {
+  lints: LuauLint[];
+}
+
 /** The Emscripten module interface */
 export interface LuauWasmModule {
   // Execution
@@ -68,10 +80,12 @@ export interface LuauWasmModule {
   ccall(name: 'luau_autocomplete', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
   ccall(name: 'luau_hover', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
   ccall(name: 'luau_signature_help', returnType: 'string', argTypes: ['string', 'number', 'number'], args: [string, number, number]): string;
+  ccall(name: 'luau_get_lints', returnType: 'string', argTypes: [], args: []): string;
     
   // Configuration
   ccall(name: 'luau_set_mode', returnType: null, argTypes: ['number'], args: [number]): void;
   ccall(name: 'luau_set_solver', returnType: null, argTypes: ['boolean'], args: [boolean]): void;
+  ccall(name: 'luau_set_lints', returnType: null, argTypes: ['string'], args: [string]): void;
   ccall(name: 'luau_set_fflags', returnType: null, argTypes: ['string'], args: [string]): void;
   
   // Bytecode

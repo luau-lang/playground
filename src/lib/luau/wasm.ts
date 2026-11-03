@@ -6,6 +6,8 @@
  * - Execution worker (on-demand): code execution - can be terminated for infinite loops
  */
 
+// NOTE: This module imports values from 'lib/stores/settings.ts' which creates a *cyclic dependency*.
+
 import { appendOutput, clearOutput, setRunning, setExecutionTime, getActiveFileContent, activeFile, getAllFiles } from '$lib/stores/playground';
 import { settings, type LuauMode, type SolverMode } from '$lib/stores/settings';
 import { get } from 'svelte/store';
@@ -13,6 +15,7 @@ import type {
   ExecuteResult, 
   LuauDiagnostic,
   LuauCompletion,
+  LuauLint
 } from './types';
 import type { WorkerRequest, WorkerResponse } from './luau.worker';
 import LuauWorker from './luau.worker?worker';
@@ -57,6 +60,15 @@ async function getRobloxStudioFlagPayload(): Promise<string | null> {
 
   return robloxStudioFlagPayloadPromise;
 }
+
+// Promise for getting all lints to use in GUI and settings
+let resolveGetAllLints: (value: LuauLint[]) => void;
+let rejectGetAllLints: (reason?: any) => void;
+
+export const getAllLints = new Promise<LuauLint[]>((resolve, reject) => {
+  resolveGetAllLints = resolve;
+  rejectGetAllLints = reject;
+});
 
 // Compiled WASM module - shared with workers to avoid recompilation
 // WebAssembly.Module is structured-clonable, so workers get the same compiled code
@@ -217,6 +229,7 @@ async function loadWorker(
   options?: { 
     checkTerminated?: boolean;
     postInit?: () => Promise<void>;
+    onError?: (reason: Error) => void;
   }
 ): Promise<void> {
   if (manager.ready && manager.worker) {
@@ -227,7 +240,7 @@ async function loadWorker(
     return manager.readyPromise;
   }
 
-  const { checkTerminated = false, postInit } = options ?? {};
+  const { checkTerminated = false, postInit, onError } = options ?? {};
 
   manager.readyPromise = (async () => {
     try {
@@ -253,11 +266,13 @@ async function loadWorker(
     } catch (error) {
       manager.readyPromise = null;
       manager.ready = false;
-      
-      if (error instanceof Error && error.message === STOPPED_ERROR) {
-        throw error;
-      }
-      throw new Error(`Failed to load ${name.toLowerCase()} worker`, { cause: error });
+
+      const toThrow = (error instanceof Error && error.message === STOPPED_ERROR) ? error
+        : new Error(`Failed to load ${name.toLowerCase()} worker`, { cause: error });
+
+      onError?.(toThrow);
+
+      throw toThrow;
     }
   })();
 
@@ -280,10 +295,23 @@ async function loadAnalysisWorker(): Promise<void> {
         await sendToWorker(analysis, 'setFFlags', { serializedFlags: robloxStudioFlags });
       }
 
+      // Resolve lints promise
+      const getLintsResponse = await sendToWorker(analysis, 'getLints', {});
+      const allLints = getLintsResponse.result.lints;
+
+      resolveGetAllLints(allLints);
+
       const currentSettings = get(settings);
+      const currentLints = currentSettings.lints === 'all' ? allLints.map(v => v.code) : currentSettings.lints;
+
       await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });
       await sendToWorker(analysis, 'setSolver', { isNew: currentSettings.solver === 'new' });
+      await sendToWorker(analysis, 'setLints', { serializedLints: currentLints.join(',') });
       initSettingsSync();
+    },
+    onError: (err: Error) => {
+      // Reject lints promise to display loading errors
+      rejectGetAllLints(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
     }
   });
 }
@@ -472,6 +500,17 @@ export async function setLuauSolver(solver: SolverMode): Promise<void> {
   }
 }
 
+/**
+ * Set enabled lints on the analysis worker.
+ */
+export async function setLints(lints: string): Promise<void> {
+  try {
+    await sendAnalysisRequest('setLints', { serializedLints: lints });
+  } catch(error) {
+    console.error('[Luau] Failed to set enabled lints:', error);
+  }
+}
+
 // Subscribe to settings changes and sync to WASM
 let settingsUnsubscribe: (() => void) | null = null;
 
@@ -480,8 +519,11 @@ export function initSettingsSync(): void {
   
   settingsUnsubscribe = settings.subscribe(async (newSettings) => {
     if (analysis.ready) {
+      const currentLints = newSettings.lints === 'all' ? (await getAllLints).map(v => v.code) : newSettings.lints;
+
       await setLuauMode(newSettings.mode);
       await setLuauSolver(newSettings.solver);
+      await setLints(currentLints.join(','));
     }
   });
 }
@@ -595,9 +637,9 @@ export async function checkCode(): Promise<void> {
       appendOutput({ type: 'log', text: '' });
       
       for (const diag of diagnostics) {
-        const location = `${fileName}:${diag.startLine + 1}:${diag.startCol + 1}`;
+        const location = `${fileName}(${diag.startLine + 1}, ${diag.startCol + 1})`;
         const type = diag.severity === 'error' ? 'error' : diag.severity === 'warning' ? 'warn' : 'log';
-        appendOutput({ type, text: `${location}: ${diag.message}` });
+        appendOutput({ type, text: `${location}: ${diag.type}: ${diag.message}` });
       }
     }
   } catch (error) {

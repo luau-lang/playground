@@ -3,6 +3,8 @@
     settings, 
     setMode, 
     setSolver, 
+    enableLint,
+    disableLint,
     setOptimizationLevel,
     setDebugLevel,
     setCompilerRemarks,
@@ -16,6 +18,7 @@
     type OutputFormat,
     type KeybindingMode
   } from '$lib/stores/settings';
+  import { getAllLints } from "$lib/luau/wasm";
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
 
@@ -66,6 +69,14 @@
     setTimeout(() => refreshDiagnostics(), 50);
   }
 
+  async function handleSetLintEnabled(lintCode: number | 'all', setEnabled: boolean) {
+    if (setEnabled) await enableLint(lintCode);
+    else await disableLint(lintCode);
+
+    const { refreshDiagnostics } = await import('$lib/editor/setup');
+    setTimeout(() => refreshDiagnostics(), 50);
+  }
+
   let popoverEl: HTMLElement;
 </script>
 
@@ -88,7 +99,7 @@
   <div class="space-y-4">
     <div>
       <h3 class="text-sm font-semibold text-(--text-primary) mb-1">Settings</h3>
-      <p class="text-xs text-(--text-muted)">Configure editor, type checking, and compiler</p>
+      <p class="text-xs text-(--text-muted)">Configure editor, type checking, lints, and compiler</p>
     </div>
 
     <!-- Type Checking Section -->
@@ -221,6 +232,59 @@
 
     <div class="border-t border-(--border-color)"></div>
 
+    <!-- Lints Section -->
+    <div class="space-y-3">
+      <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Lints</span>
+
+      <!-- Enabled Lints -->
+      <div class="space-y-1.5">
+        <span class="text-xs text-(--text-muted)">Enabled Lints</span>
+
+        <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-1">
+          {#await getAllLints}
+            <p class="text-xs text-(--text-secondary)">Loading lint options...</p>
+          {:then allLints} {#if allLints.length > 0}
+            {@const currentLints = $settings.lints}
+
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={currentLints === 'all' || currentLints.length === allLints.length}
+                onchange={(e) => handleSetLintEnabled('all', e.currentTarget.checked)}
+                class="w-4 h-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+              />
+              <span class="text-xs text-(--text-secondary)">All lints enabled</span>
+            </label>
+
+            <div class="border-t border-(--border-color)"></div>
+
+            <div class="overflow-y-auto space-y-1">
+              {#each allLints as option (option.code)}
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={currentLints === 'all' || currentLints.includes(option.code)}
+                    onchange={(e) => handleSetLintEnabled(option.code, e.currentTarget.checked)}
+                    class="w-4 h-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+                  />
+                  <span class="text-xs text-(--text-secondary)">
+                    {option.name} (<a class="text-link" target="_blank" rel="noopener noreferrer" href={`https://luau.org/lint/#${option.name.toLowerCase()}-${option.code}`}>{option.code}</a>)
+                  </span>
+                </label>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-xs text-(--text-secondary)">No available lint options were found.</p>
+          {/if} {:catch error}
+            <p class="text-xs text-red-500">Failed to fetch Luau lint options!</p>
+            <p class="text-xs text-(--text-secondary)">{error}</p>
+          {/await}
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-(--border-color)"></div>
+
     <!-- Editor Section -->
     <div class="space-y-3">
       <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Editor</span>
@@ -246,6 +310,11 @@
 <style>
   :global(.config-trigger) {
     anchor-name: --config-trigger;
+  }
+
+  .text-link {
+    color: var(--color-accent-500);
+    text-decoration: underline;
   }
 
   .config-popover {
