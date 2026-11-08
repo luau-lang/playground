@@ -1,10 +1,8 @@
-// NOTE: This module imports values from 'lib/luau/wasm.ts' which creates a *cyclic dependency*.
-
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import { STORAGE_KEY, UI_STORAGE_KEY, KEYBINDINGS_STORAGE_KEY, defaultSettings } from '$lib/constants';
 import { detectEmbedMode } from '$lib/stores/embed';
-import { getAllLints } from '$lib/luau/wasm';
+import { getAllLints } from '$lib/luau/shared-data';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -189,7 +187,7 @@ export function setSolver(solver: SolverMode): void {
 }
 
 export async function enableLint(lint: number | 'all'): Promise<void> {
-  const allLints = await getAllLints;
+  const allLints = await getAllLints.promise;
   settings.update((s) => {
     if (lint === 'all') return { ...s, lints: 'all' }; // Enable all
 
@@ -202,7 +200,7 @@ export async function enableLint(lint: number | 'all'): Promise<void> {
 }
 
 export async function disableLint(lint: number | 'all'): Promise<void> {
-  const allLints = await getAllLints;
+  const allLints = await getAllLints.promise;
   settings.update((s) => {
     if (lint === 'all') return { ...s, lints: [] }; // Disable all
 

@@ -18,7 +18,7 @@
     type OutputFormat,
     type KeybindingMode
   } from '$lib/stores/settings';
-  import { getAllLints } from "$lib/luau/wasm";
+  import { getAllLints } from "$lib/luau/shared-data";
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
 
@@ -241,7 +241,7 @@
         <span class="text-xs text-(--text-muted)">Enabled Lints</span>
 
         <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-1">
-          {#await getAllLints}
+          {#await getAllLints.promise}
             <p class="text-xs text-(--text-secondary)">Loading lint options...</p>
           {:then allLints} {#if allLints.length > 0}
             {@const currentLints = $settings.lints}

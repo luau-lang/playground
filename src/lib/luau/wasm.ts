@@ -6,8 +6,6 @@
  * - Execution worker (on-demand): code execution - can be terminated for infinite loops
  */
 
-// NOTE: This module imports values from 'lib/stores/settings.ts' which creates a *cyclic dependency*.
-
 import { appendOutput, clearOutput, setRunning, setExecutionTime, getActiveFileContent, activeFile, getAllFiles } from '$lib/stores/playground';
 import { settings, type LuauMode, type SolverMode } from '$lib/stores/settings';
 import { get } from 'svelte/store';
@@ -15,8 +13,8 @@ import type {
   ExecuteResult, 
   LuauDiagnostic,
   LuauCompletion,
-  LuauLint
 } from './types';
+import { getAllLints } from './shared-data';
 import type { WorkerRequest, WorkerResponse } from './luau.worker';
 import LuauWorker from './luau.worker?worker';
 
@@ -60,15 +58,6 @@ async function getRobloxStudioFlagPayload(): Promise<string | null> {
 
   return robloxStudioFlagPayloadPromise;
 }
-
-// Promise for getting all lints to use in GUI and settings
-let resolveGetAllLints: (value: LuauLint[]) => void;
-let rejectGetAllLints: (reason?: any) => void;
-
-export const getAllLints = new Promise<LuauLint[]>((resolve, reject) => {
-  resolveGetAllLints = resolve;
-  rejectGetAllLints = reject;
-});
 
 // Compiled WASM module - shared with workers to avoid recompilation
 // WebAssembly.Module is structured-clonable, so workers get the same compiled code
@@ -299,8 +288,9 @@ async function loadAnalysisWorker(): Promise<void> {
       const getLintsResponse = await sendToWorker(analysis, 'getLints', {});
       const allLints = getLintsResponse.result.lints;
 
-      resolveGetAllLints(allLints);
+      getAllLints.resolve(allLints);
 
+      // Apply settings and hook to settings changes
       const currentSettings = get(settings);
       const currentLints = currentSettings.lints === 'all' ? allLints.map(v => v.code) : currentSettings.lints;
 
@@ -311,7 +301,7 @@ async function loadAnalysisWorker(): Promise<void> {
     },
     onError: (err: Error) => {
       // Reject lints promise to display loading errors
-      rejectGetAllLints(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
+      getAllLints.reject(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
     }
   });
 }
@@ -519,7 +509,7 @@ export function initSettingsSync(): void {
   
   settingsUnsubscribe = settings.subscribe(async (newSettings) => {
     if (analysis.ready) {
-      const currentLints = newSettings.lints === 'all' ? (await getAllLints).map(v => v.code) : newSettings.lints;
+      const currentLints = newSettings.lints === 'all' ? (await getAllLints.promise).map(v => v.code) : newSettings.lints;
 
       await setLuauMode(newSettings.mode);
       await setLuauSolver(newSettings.solver);
