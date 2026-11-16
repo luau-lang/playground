@@ -248,7 +248,7 @@ function tokenStyle(token: string | null): string | null {
     variable: dark ? 'var(--color-extended-gray-300)' : 'var(--color-extended-gray-900)',
     operator: dark ? 'var(--color-carmine-400)' : 'var(--color-carmine-900)',
     punctuation: dark ? 'var(--color-extended-gray-400)' : 'var(--color-extended-gray-800)',
-    comment: 'var(--color-extended-gray-600)'
+    comment: dark ? 'var(--color-extended-gray-500)' : 'var(--color-extended-gray-600)'
   };
 
   switch (token) {
