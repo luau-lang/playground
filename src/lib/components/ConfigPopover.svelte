@@ -302,7 +302,7 @@
       <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Flags</span>
 
       <p class="text-xs text-(--text-muted)">
-        Luau flags allow for the configuration of internal behaviour and non-finalized features. Use with caution!
+        Luau flags allow for the configuration of internal behaviour and non-finalized features. Things might not always work, use with caution!
       </p>
 
       <div class="space-y-1.5">
@@ -340,12 +340,14 @@
                 source={allFlags}
                 overloads={overloadedFlags}
                 filter={(source) => {
-                  const desiredSource = flagSearchOnlyShowModifiedFlags ? Object.entries(overloadedFlags) : source
+                  const desiredSource = flagSearchOnlyShowModifiedFlags ? Object.entries(overloadedFlags) : source;
 
+                  // Split search string into individual search terms
                   const query = flagSearchString.toLowerCase().split(/\s+/);
-                  query.filter(s => s.length !== 0)
+                  query.filter(s => s.length !== 0);
                   if (query.length === 0) return desiredSource;
 
+                  // Search for each term
                   return desiredSource.filter(([key]) => (
                     query.every(s => key.toLowerCase().includes(s))
                   ));

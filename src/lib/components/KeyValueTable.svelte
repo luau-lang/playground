@@ -31,7 +31,7 @@
   }: Props = $props();
 
   const classes = $derived(`border-collapse text-xs text-(--text-secondary) table-fixed ${tableclass}`);
-  const cellClasses = $derived(`border border-(--border-color-heavy) overflow-hidden whitespace-nowrap ${cellclass}`)
+  const cellClasses = $derived(`border border-(--border-color-heavy) overflow-hidden whitespace-nowrap ${cellclass}`);
 
   const displayedEntries = $derived.by(() => {
     const entries = Object.entries(sourceRecord);
@@ -131,8 +131,8 @@
                 step={1}
                 title="Change the integer value for this flag."
                 onchange={(e) => {
-                  const int = parseInt(e.currentTarget.value, 10)
-                  if (!isNaN(int)) onEntryChanged?.(key, int)
+                  const int = parseInt(e.currentTarget.value, 10);
+                  if (!isNaN(int)) onEntryChanged?.(key, int);
                 }}
               />
             {:else}

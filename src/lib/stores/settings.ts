@@ -263,10 +263,6 @@ export async function setFlagOverload(flagName: string, value: boolean | number)
   });
 }
 
-export function resetFlagOverloads() {
-  settings.update((s) => ({ ...s, overloadedFlags: {} }));
-}
-
 export function getSettings(): PlaygroundSettings {
   return get(settings);
 }
