@@ -138,6 +138,7 @@ html, body {
   --text-secondary: var(--color-extended-gray-700);
   --text-muted: var(--color-extended-gray-600);
   --border-color: var(--color-extended-gray-300);
+  --border-color-heavy: var(--color-extended-gray-400);
   --accent: var(--color-accent-500);
   --accent-hover: var(--color-accent-600);
   
@@ -159,6 +160,7 @@ html, body {
   --text-secondary: var(--color-extended-gray-500);
   --text-muted: var(--color-extended-gray-600);
   --border-color: var(--color-extended-gray-800);
+  --border-color-heavy: var(--color-extended-gray-700);
   --accent: var(--color-accent-400);
   --accent-hover: var(--color-accent-500);
   

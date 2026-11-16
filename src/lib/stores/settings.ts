@@ -1,10 +1,9 @@
-// NOTE: This module imports values from 'lib/luau/wasm.ts' which creates a *cyclic dependency*.
-
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import { STORAGE_KEY, UI_STORAGE_KEY, KEYBINDINGS_STORAGE_KEY, defaultSettings } from '$lib/constants';
 import { detectEmbedMode } from '$lib/stores/embed';
-import { getAllLints } from '$lib/luau/wasm';
+import { getAllLints, getAllFlags } from '$lib/luau/shared-data';
+import type { LuauFlagRecord } from '$lib/luau/types';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -26,6 +25,8 @@ export interface PlaygroundSettings {
   debugLevel: DebugLevel;
   outputFormat: OutputFormat;
   compilerRemarks: boolean;
+  // Flags
+  overloadedFlags: LuauFlagRecord;
 }
 
 // Try to load settings from URL hash
@@ -121,6 +122,7 @@ function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings
     debugLevel: partial.debugLevel ?? defaultSettings.debugLevel,
     outputFormat: partial.outputFormat ?? defaultSettings.outputFormat,
     compilerRemarks: partial.compilerRemarks ?? defaultSettings.compilerRemarks,
+    overloadedFlags: partial.overloadedFlags ?? defaultSettings.overloadedFlags,
   };
 }
 
@@ -189,7 +191,7 @@ export function setSolver(solver: SolverMode): void {
 }
 
 export async function enableLint(lint: number | 'all'): Promise<void> {
-  const allLints = await getAllLints;
+  const allLints = await getAllLints.promise;
   settings.update((s) => {
     if (lint === 'all') return { ...s, lints: 'all' }; // Enable all
 
@@ -202,7 +204,7 @@ export async function enableLint(lint: number | 'all'): Promise<void> {
 }
 
 export async function disableLint(lint: number | 'all'): Promise<void> {
-  const allLints = await getAllLints;
+  const allLints = await getAllLints.promise;
   settings.update((s) => {
     if (lint === 'all') return { ...s, lints: [] }; // Disable all
 
@@ -235,6 +237,34 @@ export function setKeybindings(mode: KeybindingMode): void {
 
 export function toggleBytecode(): void {
   showBytecode.update((v) => !v);
+}
+
+export async function setFlagOverload(flagName: string, value: boolean | number): Promise<void> {
+  const allFlags = await getAllFlags.promise;
+  const defaultValue = allFlags[flagName];
+
+  if (defaultValue === undefined) {
+    console.error(`[Settings] Tried to overload a Luau flag named "${flagName}" which does not exist.`);
+    return;
+  }
+
+  if (typeof value !== typeof defaultValue) {
+    console.error(`[Settings] Expected value type '${typeof defaultValue}' for flag "${flagName}" but got '${typeof value}'`);
+    return;
+  }
+
+  settings.update((s) => {
+    const { [flagName]: _, ...remainingFlags } = s.overloadedFlags;
+    
+    return {
+      ...s,
+      overloadedFlags: value === defaultValue ? remainingFlags : { ...remainingFlags, [flagName]: value }
+    };
+  });
+}
+
+export function resetFlagOverloads() {
+  settings.update((s) => ({ ...s, overloadedFlags: {} }));
 }
 
 export function getSettings(): PlaygroundSettings {

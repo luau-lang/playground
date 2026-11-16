@@ -46,6 +46,7 @@ The build script will:
 - `luau_set_mode(mode: number)` - Set the type checking mode between non-strict (0), strict (1) and no-check (2)
 - `luau_set_lints(serializedLints: string)` - Enable lints serialized as lint codes separated by commas
 - `luau_set_fflags(serializedFlags: string)` - Apply Luau fast flags/ints serialized as newline-delimited `"Name=Value"` entries
+- `luau_get_fflags()` - Get a list of all Luau FValues (FFlag and FInt)
 
 ### Modules
 
@@ -63,7 +64,7 @@ The build script will:
 
 All functions return JSON strings. Example responses:
 
-```json
+```jsonc
 // luau_execute
 { "success": true, "output": "Hello, World!" }
 { "success": false, "output": "", "error": "attempt to call nil" }
@@ -91,6 +92,9 @@ All functions return JSON strings. Example responses:
 
 // luau_get_lints
 { "lints": [{ "name": "UnknownGlobal", "code": 1 }, { "name": "DeprecatedGlobal", "code": 2 }, ...] }
+
+// luau_get_fflags
+{ "flags": {"LuauSomeBooleanValue": false, "LuauSomeIntValue": 100} }
 
 // luau_get_modules
 { "modules": ["module1", "module2", "someModule"] }

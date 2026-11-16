@@ -10,6 +10,7 @@ export const defaultSettings: PlaygroundSettings = {
   debugLevel: 1,
   outputFormat: 0,
   compilerRemarks: false,
+  overloadedFlags: {},
 };
 
 // Key for localStorage persistence of settings

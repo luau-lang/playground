@@ -29,6 +29,8 @@ export interface LuauLint {
   code: number;
 }
 
+export type LuauFlagRecord = Record<string, boolean | number>;
+
 export interface ExecuteResult {
   success: boolean;
   output: string;
@@ -63,6 +65,10 @@ export interface LintsResult {
   lints: LuauLint[];
 }
 
+export interface FFlagsResult {
+  flags: LuauFlagRecord;
+}
+
 /** The Emscripten module interface */
 export interface LuauWasmModule {
   // Execution
@@ -87,6 +93,7 @@ export interface LuauWasmModule {
   ccall(name: 'luau_set_solver', returnType: null, argTypes: ['boolean'], args: [boolean]): void;
   ccall(name: 'luau_set_lints', returnType: null, argTypes: ['string'], args: [string]): void;
   ccall(name: 'luau_set_fflags', returnType: null, argTypes: ['string'], args: [string]): void;
+  ccall(name: 'luau_get_fflags', returnType: 'string', argTypes: [], args: []): string;
   
   // Bytecode
   ccall(name: 'luau_dump_bytecode', returnType: 'string', argTypes: ['string', 'number', 'number', 'number', 'number'], args: [string, number, number, number, number]): string;

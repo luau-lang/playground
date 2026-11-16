@@ -6,8 +6,6 @@
  * - Execution worker (on-demand): code execution - can be terminated for infinite loops
  */
 
-// NOTE: This module imports values from 'lib/stores/settings.ts' which creates a *cyclic dependency*.
-
 import { appendOutput, clearOutput, setRunning, setExecutionTime, getActiveFileContent, activeFile, getAllFiles } from '$lib/stores/playground';
 import { settings, type LuauMode, type SolverMode } from '$lib/stores/settings';
 import { get } from 'svelte/store';
@@ -15,8 +13,9 @@ import type {
   ExecuteResult, 
   LuauDiagnostic,
   LuauCompletion,
-  LuauLint
+  LuauFlagRecord
 } from './types';
+import { getAllLints, getAllFlags } from './shared-data';
 import type { WorkerRequest, WorkerResponse } from './luau.worker';
 import LuauWorker from './luau.worker?worker';
 
@@ -32,43 +31,47 @@ const ROBLOX_FAST_FLAG_KINDS = ['FFlag', 'FInt', 'DFFlag', 'DFInt'] as const;
 const modeToNum = (mode: LuauMode): number =>
   mode === 'strict' ? 1 : mode === 'nocheck' ? 2 : 0;
 
-let robloxStudioFlagPayloadPromise: Promise<string | null> | null = null;
+async function tryOverloadFlagRecordWithRobloxStudioFlagPayload(target: LuauFlagRecord): Promise<void> {
+  const overloadTarget = async () => {
+    const response = await fetch(ROBLOX_PC_STUDIO_FLAGS_URL);
+    if (!response.ok) {
+      throw new Error(`HTTP Error ${response.status} ${response.statusText}`);
+    }
 
-async function getRobloxStudioFlagPayload(): Promise<string | null> {
-  if (!robloxStudioFlagPayloadPromise) {
-    robloxStudioFlagPayloadPromise = fetch(ROBLOX_PC_STUDIO_FLAGS_URL)
-      .then((response) => response.json())
-      .then(({ applicationSettings }: { applicationSettings?: Record<string, string> }) => {
-        const lines: string[] = [];
+    const { applicationSettings } = await response.json() as { applicationSettings?: Record<string, string> };
 
-        for (const [name, value] of Object.entries(applicationSettings ?? {})) {
-          for (const kind of ROBLOX_FAST_FLAG_KINDS) {
-            if (name.startsWith(`${kind}Luau`)) {
-              lines.push(`${name.slice(kind.length)}=${value}`);
-              break;
-            }
-          }
+    for (const [name, value] of Object.entries(applicationSettings ?? {})) {
+      for (const kind of ROBLOX_FAST_FLAG_KINDS) {
+        if (name.startsWith(`${kind}Luau`)) {
+          // Strip flags kind prefix and version suffix from the name.
+          const flagName = name.slice(kind.length).replace(/\d+$/, '');
+
+          // Only apply base Luau flags excluding Roblox-based ones
+          if (target[flagName] === undefined) break;
+
+          const primitive = value === 'True' ? true : value === 'False' ? false : parseInt(value, 10);
+
+          target[flagName] = primitive;
+
+          break;
         }
-
-        return lines.length > 0 ? lines.join('\n') : null;
-      })
-      .catch((error) => {
-        console.warn('[Luau] Failed to sync Roblox Studio Luau flags:', error);
-        return null;
-      });
+      }
+    }
   }
 
-  return robloxStudioFlagPayloadPromise;
+  return overloadTarget()
+    .catch((error) => {
+      console.warn('[Luau] Failed to sync Roblox Studio Luau flags:', error);
+    });
 }
 
-// Promise for getting all lints to use in GUI and settings
-let resolveGetAllLints: (value: LuauLint[]) => void;
-let rejectGetAllLints: (reason?: any) => void;
-
-export const getAllLints = new Promise<LuauLint[]>((resolve, reject) => {
-  resolveGetAllLints = resolve;
-  rejectGetAllLints = reject;
-});
+function serializeFlagRecord(source: LuauFlagRecord) {
+  const result: string[] = [];
+  for (const [name, value] of Object.entries(source)) {
+    result.push(`${name}=${value}`);
+  }
+  return result.join('\n');
+}
 
 // Compiled WASM module - shared with workers to avoid recompilation
 // WebAssembly.Module is structured-clonable, so workers get the same compiled code
@@ -286,32 +289,38 @@ async function loadWorker(
 const analysis = createWorkerManager();
 
 async function loadAnalysisWorker(): Promise<void> {
-  const robloxStudioFlagsPromise = getRobloxStudioFlagPayload();
-
   return loadWorker(analysis, 'Analysis', {
     postInit: async () => {
-      const robloxStudioFlags = await robloxStudioFlagsPromise;
-      if (robloxStudioFlags) {
-        await sendToWorker(analysis, 'setFFlags', { serializedFlags: robloxStudioFlags });
-      }
+      // Resolve flags promise
+      const getFFlagsResponse = await sendToWorker(analysis, 'getFFlags', {});
+      const allLuauFlags = getFFlagsResponse.result.flags;
+
+      // Overload flag defaults with ones fetched from the current Roblox Studio client settings
+      await tryOverloadFlagRecordWithRobloxStudioFlagPayload(allLuauFlags);
+
+      getAllFlags.resolve(allLuauFlags);
 
       // Resolve lints promise
       const getLintsResponse = await sendToWorker(analysis, 'getLints', {});
       const allLints = getLintsResponse.result.lints;
 
-      resolveGetAllLints(allLints);
+      getAllLints.resolve(allLints);
 
+      // Apply settings and hook to settings changes
       const currentSettings = get(settings);
       const currentLints = currentSettings.lints === 'all' ? allLints.map(v => v.code) : currentSettings.lints;
+      const baseFlags = Object.assign({}, allLuauFlags, currentSettings.overloadedFlags);
 
+      await sendToWorker(analysis, 'setFFlags', { serializedFlags: serializeFlagRecord(baseFlags) });
       await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });
       await sendToWorker(analysis, 'setSolver', { isNew: currentSettings.solver === 'new' });
       await sendToWorker(analysis, 'setLints', { serializedLints: currentLints.join(',') });
       initSettingsSync();
     },
     onError: (err: Error) => {
-      // Reject lints promise to display loading errors
-      rejectGetAllLints(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
+      // Reject getter promises to display loading errors
+      getAllLints.reject(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
+      getAllFlags.reject(`${err.message}: "${err.cause ?? 'Undefined cause'}"`)
     }
   });
 }
@@ -336,17 +345,23 @@ async function syncAnalysisSources(): Promise<void> {
 const execution = createWorkerManager();
 
 async function loadExecutionWorker(): Promise<void> {
-  const robloxStudioFlagsPromise = getRobloxStudioFlagPayload();
-
   return loadWorker(execution, 'Execution', {
     checkTerminated: true,
     postInit: async () => {
-      const robloxStudioFlags = await robloxStudioFlagsPromise;
-      if (robloxStudioFlags) {
-        await sendToWorker(execution, 'setFFlags', { serializedFlags: robloxStudioFlags });
+      // The 'getAllFlags' promise is resolved during the analysis workers initialization.
+      // This is permissible due to the analysis worker being loaded on-mount and the execution worker being on-demand.
+      // Refer to 'loadAnalysisWorker' if necessary.
+      let allLuauFlags: LuauFlagRecord = {};
+      try {
+        allLuauFlags = await getAllFlags.promise;
+      } catch {
+        // Ignore flag fetch errors
       }
 
       const currentSettings = get(settings);
+      const baseFlags = Object.assign({}, allLuauFlags, currentSettings.overloadedFlags);
+
+      await sendToWorker(execution, 'setFFlags', { serializedFlags: serializeFlagRecord(baseFlags) });
       await sendToWorker(execution, 'setMode', { mode: modeToNum(currentSettings.mode) });
     }
   });
@@ -511,6 +526,22 @@ export async function setLints(lints: string): Promise<void> {
   }
 }
 
+/**
+ * Overload flags on the analysis worker, and the execution worker if it's ready.
+ */
+export async function setFlags(flags: LuauFlagRecord): Promise<void> {
+  try {
+    const serializedFlags = serializeFlagRecord(flags)
+    await sendAnalysisRequest('setFFlags', { serializedFlags });
+    // Also update execution worker if it's running
+    if (execution.ready) {
+      await sendToWorker(execution, 'setFFlags', { serializedFlags });
+    }
+  } catch(error) {
+    console.error('[Luau] Failed to overload certain flags:', error);
+  }
+}
+
 // Subscribe to settings changes and sync to WASM
 let settingsUnsubscribe: (() => void) | null = null;
 
@@ -519,8 +550,9 @@ export function initSettingsSync(): void {
   
   settingsUnsubscribe = settings.subscribe(async (newSettings) => {
     if (analysis.ready) {
-      const currentLints = newSettings.lints === 'all' ? (await getAllLints).map(v => v.code) : newSettings.lints;
+      const currentLints = newSettings.lints === 'all' ? (await getAllLints.promise).map(v => v.code) : newSettings.lints;
 
+      await setFlags(newSettings.overloadedFlags);
       await setLuauMode(newSettings.mode);
       await setLuauSolver(newSettings.solver);
       await setLints(currentLints.join(','));

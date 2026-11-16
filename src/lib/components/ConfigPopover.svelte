@@ -9,6 +9,7 @@
     setDebugLevel,
     setCompilerRemarks,
     setOutputFormat,
+    setFlagOverload,
     keybindings,
     setKeybindings,
     type LuauMode, 
@@ -18,8 +19,9 @@
     type OutputFormat,
     type KeybindingMode
   } from '$lib/stores/settings';
-  import { getAllLints } from "$lib/luau/wasm";
+  import { getAllFlags, getAllLints } from "$lib/luau/shared-data";
   import Button from '$lib/components/Button.svelte';
+  import KeyValueTable from '$lib/components/KeyValueTable.svelte';
   import { Icon } from '$lib/icons';
 
   const modeOptions: { value: LuauMode; label: string; description: string }[] = [
@@ -76,6 +78,16 @@
     const { refreshDiagnostics } = await import('$lib/editor/setup');
     setTimeout(() => refreshDiagnostics(), 50);
   }
+
+  async function handleSetFlagOverload(flagName: string, value: boolean | number) {
+    await setFlagOverload(flagName, value);
+
+    const { refreshDiagnostics } = await import('$lib/editor/setup');
+    setTimeout(() => refreshDiagnostics(), 50);
+  }
+
+  let flagSearchString: string = '';
+  let flagSearchOnlyShowModifiedFlags: boolean = false;
 
   let popoverEl: HTMLElement;
 </script>
@@ -241,7 +253,7 @@
         <span class="text-xs text-(--text-muted)">Enabled Lints</span>
 
         <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-1">
-          {#await getAllLints}
+          {#await getAllLints.promise}
             <p class="text-xs text-(--text-secondary)">Loading lint options...</p>
           {:then allLints} {#if allLints.length > 0}
             {@const currentLints = $settings.lints}
@@ -276,7 +288,73 @@
           {:else}
             <p class="text-xs text-(--text-secondary)">No available lint options were found.</p>
           {/if} {:catch error}
-            <p class="text-xs text-red-500">Failed to fetch Luau lint options!</p>
+            <p class="text-xs text-error-500">Failed to fetch Luau lint options!</p>
+            <p class="text-xs text-(--text-secondary)">{error}</p>
+          {/await}
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-(--border-color)"></div>
+
+    <!-- Flags Section -->
+    <div class="space-y-3">
+      <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Flags</span>
+
+      <p class="text-xs text-(--text-muted)">
+        Luau flags allow for the configuration of internal behaviour and non-finalized features. Use with caution!
+      </p>
+
+      <div class="space-y-1.5">
+        <span class="text-xs text-(--text-muted)">Flags Table</span>
+
+        <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[35vh] h-[35vh] border-(--border-color) border rounded-md space-y-1">
+          <input
+            bind:value={flagSearchString}
+            class="text-xs p-1 bg-(--bg-secondary) border-(--border-color) border rounded-md"
+            placeholder="Search for flag name..."
+            type="search"
+          />
+
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              bind:checked={flagSearchOnlyShowModifiedFlags}
+              value={false}
+              type="checkbox"
+              class="w-4 h-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+            />
+            <span class="text-xs text-(--text-secondary)">Only show modified flags</span>
+          </label>
+
+          <div class="border-t border-(--border-color)"></div>
+
+          {#await getAllFlags.promise}
+            <p class="text-xs text-(--text-secondary)">Loading flags table...</p>
+          {:then allFlags}
+            {@const overloadedFlags = $settings.overloadedFlags}
+            <div class="overflow-y-auto">
+              <KeyValueTable
+                tableclass="w-full"
+                keyheader="Name"
+                valueheader="Value"
+                source={allFlags}
+                overloads={overloadedFlags}
+                filter={(source) => {
+                  const desiredSource = flagSearchOnlyShowModifiedFlags ? Object.entries(overloadedFlags) : source
+
+                  const query = flagSearchString.toLowerCase().split(/\s+/);
+                  query.filter(s => s.length !== 0)
+                  if (query.length === 0) return desiredSource;
+
+                  return desiredSource.filter(([key]) => (
+                    query.every(s => key.toLowerCase().includes(s))
+                  ));
+                }}
+                onentrychanged={handleSetFlagOverload}
+              />
+            </div>
+          {:catch error}
+            <p class="text-xs text-error-500">Failed to fetch Luau flags!</p>
             <p class="text-xs text-(--text-secondary)">{error}</p>
           {/await}
         </div>
@@ -313,7 +391,7 @@
   }
 
   .text-link {
-    color: var(--color-accent-500);
+    color: var(--color-blue-600);
     text-decoration: underline;
   }
 

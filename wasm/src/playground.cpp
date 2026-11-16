@@ -1132,9 +1132,9 @@ static void registerFastFlags(std::unordered_map<std::string, std::string>& fast
         if (it == fastFlags.end())
             continue;
 
-        if (it->second == "True")
+        if (it->second == "true" || it->second == "True")
             flag->value = true;
-        else if (it->second == "False")
+        else if (it->second == "false" || it->second == "False")
             flag->value = false;
 
         fastFlags.erase(it);
@@ -1561,5 +1561,32 @@ EXPORT const char* luau_get_lints() {
     }
 
     json << "]}";
+    return setResult(json.str());
+}
+
+/**
+ * Get a list of all available Luau FValues (FFlag and FInt, including their variations).
+ */
+EXPORT const char* luau_get_fflags() {
+    std::ostringstream json;
+    json << "{\"flags\":{";
+
+    bool first = true;
+
+    for (Luau::FValue<bool>* flag = Luau::FValue<bool>::list; flag; flag = flag->next) {
+        if (!first) json << ",";
+        first = false;
+
+        json << ::json::string(flag->name) << ":" << ::json::boolean(flag->value);
+    }
+
+    for (Luau::FValue<int>* flag = Luau::FValue<int>::list; flag; flag = flag->next) {
+        if (!first) json << ",";
+        first = false;
+
+        json << ::json::string(flag->name) << ":" << flag->value;
+    }
+
+    json << "}}";
     return setResult(json.str());
 }
