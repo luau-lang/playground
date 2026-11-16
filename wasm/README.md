@@ -38,7 +38,6 @@ The build script will:
 - `luau_autocomplete(code: string, line: number, col: number)` - Get completion suggestions
 - `luau_hover(code: string, line: number, col: number)` - Get type info for hover
 - `luau_signature_help(code: string, line: number, col: number)` - Get function signatures
-- `luau_get_lints()` - Get a list of all lints
 
 ### Configuration
 
@@ -46,6 +45,10 @@ The build script will:
 - `luau_set_mode(mode: number)` - Set the type checking mode between non-strict (0), strict (1) and no-check (2)
 - `luau_set_lints(serializedLints: string)` - Enable lints serialized as lint codes separated by commas
 - `luau_set_fflags(serializedFlags: string)` - Apply Luau fast flags/ints serialized as newline-delimited `"Name=Value"` entries
+
+### Utility
+
+- `luau_get_lints()` - Get a list of all lints
 - `luau_get_fflags()` - Get a list of all Luau FValues (FFlag and FInt)
 
 ### Modules
