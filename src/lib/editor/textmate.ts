@@ -97,7 +97,8 @@ function scopeToToken(scopes: string[]): string | null {
     if (scope.startsWith('support.function')) return 'variableName.function';
     if (scope.includes('function-call')) return 'variableName.function';
     
-    // Variables
+    // Variables. `self` is a contextual keyword, already tagged by the grammar.
+    if (scope.startsWith('variable.language.self')) return 'keyword';
     if (scope.startsWith('variable.parameter')) return 'variableName.definition';
     if (scope.startsWith('variable')) return 'variableName';
     
