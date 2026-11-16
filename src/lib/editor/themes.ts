@@ -63,9 +63,7 @@ const darkColors: ThemeColors = {
   keyword: "var(--color-blue-500)",
   string: "var(--color-green-400)",
   number: "var(--color-purple-500)",
-  // Between gray-500 and gray-600. Gray-600 is about 3.7:1 on the dark editor surface.
-  // This value is about 5.7:1 and still reads as secondary to the code text.
-  comment: "rgb(135, 141, 160)",
+  comment: "var(--color-extended-gray-600)",
   function: "var(--color-carmine-400)",
   variable: "var(--color-extended-gray-300)",
   type: "var(--color-blue-400)",
