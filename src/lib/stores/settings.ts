@@ -182,6 +182,28 @@ if (typeof window !== 'undefined' && !detectEmbedMode()) {
   });
 }
 
+// Prune all deranged entries from 'overloadedFlags'
+// This includes non-existent flag names, value type mismatches and non-overloaded values
+getAllFlags.promise
+  .then((allFlags) => (settings.update((s) => {
+    const result = { ...s.overloadedFlags }
+    let hasPruned = false;
+
+    for (const [key, value] of Object.entries(s.overloadedFlags)) {
+      const defaultValue = allFlags[key];
+      if (typeof value !== typeof defaultValue || value === defaultValue) {
+        delete result[key];
+        hasPruned = true;
+      }
+    }
+
+    // We don't need to construct a new settings object if nothing was cleaned.
+    return hasPruned ? { ...s, overloadedFlags: result } : s;
+  })))
+  .catch((err) => {
+    console.warn('[Settings] Failed to remove deranged flag overloads from settings:', err)
+  });
+
 export function setMode(mode: LuauMode): void {
   settings.update((s) => ({ ...s, mode }));
 }
@@ -255,7 +277,7 @@ export async function setFlagOverload(flagName: string, value: boolean | number)
 
   settings.update((s) => {
     const { [flagName]: _, ...remainingFlags } = s.overloadedFlags;
-    
+
     return {
       ...s,
       overloadedFlags: value === defaultValue ? remainingFlags : { ...remainingFlags, [flagName]: value }
