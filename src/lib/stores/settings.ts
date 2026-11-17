@@ -186,7 +186,7 @@ if (typeof window !== 'undefined' && !detectEmbedMode()) {
 // This includes non-existent flag names, value type mismatches and non-overloaded values
 getAllFlags.promise
   .then((allFlags) => (settings.update((s) => {
-    const result = { ...s.overloadedFlags }
+    const result = { ...s.overloadedFlags };
     let hasPruned = false;
 
     for (const [key, value] of Object.entries(s.overloadedFlags)) {
@@ -201,7 +201,7 @@ getAllFlags.promise
     return hasPruned ? { ...s, overloadedFlags: result } : s;
   })))
   .catch((err) => {
-    console.warn('[Settings] Failed to remove deranged flag overloads from settings:', err)
+    console.warn('[Settings] Failed to remove deranged flag overloads from settings:', err);
   });
 
 export function setMode(mode: LuauMode): void {

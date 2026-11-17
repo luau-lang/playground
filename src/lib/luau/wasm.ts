@@ -320,7 +320,7 @@ async function loadAnalysisWorker(): Promise<void> {
     onError: (err: Error) => {
       // Reject getter promises to display loading errors
       getAllLints.reject(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
-      getAllFlags.reject(`${err.message}: "${err.cause ?? 'Undefined cause'}"`)
+      getAllFlags.reject(`${err.message}: "${err.cause ?? 'Undefined cause'}"`);
     }
   });
 }
@@ -348,9 +348,9 @@ async function loadExecutionWorker(): Promise<void> {
   return loadWorker(execution, 'Execution', {
     checkTerminated: true,
     postInit: async () => {
-      // The 'getAllFlags' promise is resolved during the analysis workers initialization.
-      // This is permissible due to the analysis worker being loaded on-mount and the execution worker being on-demand.
-      // Refer to 'loadAnalysisWorker' if necessary.
+      // The 'getAllFlags' promise is resolved during the analysis workers initialization
+      // This is permissible due to the analysis worker being loaded on-mount and the execution worker being on-demand
+      // Refer to 'loadAnalysisWorker' if necessary
       let allLuauFlags: LuauFlagRecord = {};
       try {
         allLuauFlags = await getAllFlags.promise;
@@ -531,7 +531,7 @@ export async function setLints(lints: string): Promise<void> {
  */
 export async function setFlags(flags: LuauFlagRecord): Promise<void> {
   try {
-    const serializedFlags = serializeFlagRecord(flags)
+    const serializedFlags = serializeFlagRecord(flags);
     await sendAnalysisRequest('setFFlags', { serializedFlags });
     // Also update execution worker if it's running
     if (execution.ready) {
