@@ -58,7 +58,7 @@
   let heldResizerPointer: number | null = null;
 
   function onResizerPointerDown(e: PointerEvent & { currentTarget: HTMLDivElement }) {
-    if (!tableEl || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!tableEl || heldResizerPointer !== null || !e.isPrimary || e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     heldResizerPointer = e.pointerId;
@@ -75,9 +75,55 @@
     if (e.pointerId !== heldResizerPointer) return;
     heldResizerPointer = null;
   }
+
+  function onResizerKeyDown(e: KeyboardEvent) {
+    const scrollStep = e.shiftKey ? 5 : 1;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      keyColumnWidthPercentage = Math.max(keyColumnWidthPercentage - scrollStep, KEY_COLUMN_MIN_PERCENTAGE);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      keyColumnWidthPercentage = Math.min(keyColumnWidthPercentage + scrollStep, KEY_COLUMN_MAX_PERCENTAGE);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      keyColumnWidthPercentage = 10;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      keyColumnWidthPercentage = 90;
+    } else if (e.key === 'Delete') {
+      // Delete key acts as a reset key, sets width to the base 70%
+      e.preventDefault();
+      keyColumnWidthPercentage = 70;
+    }
+  }
 </script>
 
 <div class="relative w-full">
+  <!-- Interactable div for resizing columns -->
+  <!--
+  Note that, the more appropriate role for this element should be 'separator'.
+  However, this triggers a 'a11y_no_noninteractive_tabindex' warning, so this is avoided by setting the role as 'slider'
+  -->
+  <div
+    class="absolute inset-y-0 -ml-1.5 w-3 pointer-coarse:-ml-3 pointer-coarse:w-6 cursor-col-resize select-none touch-none
+    focus-visible:w-1 focus-visible:-ml-0.5 focus-visible:outline-none focus-visible:bg-accent-500"
+    style:left="{keyColumnWidthPercentage}%"
+    role="slider"
+    aria-label="Resize columns on table"
+    aria-controls="{idlabel}-table-content"
+    aria-orientation="vertical"
+    aria-valuenow={Math.round(keyColumnWidthPercentage)}
+    aria-valuemin={10}
+    aria-valuemax={90}
+    tabindex="0"
+    onkeydown={onResizerKeyDown}
+    onpointerdown={onResizerPointerDown}
+    onpointermove={onResizerPointerMove}
+    onpointerup={onResizerPointerUp}
+    onpointercancel={onResizerPointerUp}
+  ></div>
+
+  <!-- Interactable key-value pair table -->
   <table
     id="{idlabel}-table-content"
     bind:this={tableEl}
@@ -106,7 +152,7 @@
               class="text-left overflow-hidden text-ellipsis size-full p-px"
               class:hover:bg-(--bg-secondary)={isOverloaded}
               class:font-bold={isOverloaded}
-              title="{isOverloaded ? 'Return this flags value to its default.' : key}"
+              title="{isOverloaded ? `Return the '${key}' flags value to its default.` : key}"
               disabled={!isOverloaded}
               onclick={(e) => onEntryChanged?.(key, sourceRecord[key])}
             >
@@ -151,22 +197,4 @@
       {/each}
     </tbody>
   </table>
-
-  <!-- Interactable div for resizing columns -->
-  <div
-    class="absolute inset-y-0 -ml-1.5 w-3 pointer-coarse:-ml-3 pointer-coarse:w-6 cursor-col-resize select-none touch-none"
-    style:left="{keyColumnWidthPercentage}%"
-    role="slider"
-    aria-label="Change column size on key value table"
-    aria-controls="{idlabel}-table-content"
-    aria-orientation="horizontal"
-    aria-valuenow={keyColumnWidthPercentage}
-    aria-valuemin={10}
-    aria-valuemax={90}
-    tabindex="0"
-    onpointerdown={onResizerPointerDown}
-    onpointermove={onResizerPointerMove}
-    onpointerup={onResizerPointerUp}
-    onpointercancel={onResizerPointerUp}
-  ></div>
 </div>
