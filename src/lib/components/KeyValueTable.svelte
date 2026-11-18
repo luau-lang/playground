@@ -2,6 +2,8 @@
   type SupportedValues = boolean | number;
 
   interface Props {
+    idlabel: string; /* idlabel must be unique for every table */
+
     tableclass?: string;
     cellclass?: string;
 
@@ -19,6 +21,7 @@
   const KEY_COLUMN_MIN_PERCENTAGE = 10;
 
   let {
+    idlabel,
     tableclass = '',
     cellclass = '',
     keyheader,
@@ -76,6 +79,7 @@
 
 <div class="relative w-full">
   <table
+    id="{idlabel}-table-content"
     bind:this={tableEl}
     class={classes}
     {...restProps}
@@ -153,6 +157,9 @@
     class="absolute inset-y-0 -ml-1.5 w-3 pointer-coarse:-ml-3 pointer-coarse:w-6 cursor-col-resize select-none touch-none"
     style:left="{keyColumnWidthPercentage}%"
     role="slider"
+    aria-label="Change column size on key value table"
+    aria-controls="{idlabel}-table-content"
+    aria-orientation="horizontal"
     aria-valuenow={keyColumnWidthPercentage}
     aria-valuemin={10}
     aria-valuemax={90}

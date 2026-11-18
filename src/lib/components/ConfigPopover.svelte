@@ -334,6 +334,7 @@
             {@const overloadedFlags = $settings.overloadedFlags}
             <div class="overflow-y-auto">
               <KeyValueTable
+                idlabel="luau-flag-config"
                 tableclass="w-full"
                 keyheader="Name"
                 valueheader="Value"
