@@ -11,6 +11,7 @@ export type OptimizationLevel = 0 | 1 | 2;
 export type DebugLevel = 0 | 1 | 2;
 export type OutputFormat = 0 | 1 | 2 | 3;
 export type KeybindingMode = "default" | "vim";
+export type { LuauFlagRecord };
 
 const keybindingModes: readonly KeybindingMode[] = ["default", "vim"];
 
@@ -261,27 +262,38 @@ export function toggleBytecode(): void {
   showBytecode.update((v) => !v);
 }
 
-export async function setFlagOverload(flagName: string, value: boolean | number): Promise<void> {
+export async function setFlagOverloads(overloads: LuauFlagRecord): Promise<void> {
   const allFlags = await getAllFlags.promise;
-  const defaultValue = allFlags[flagName];
+  const validatedOverloads: [string, boolean | number, boolean][] = [];
 
-  if (defaultValue === undefined) {
-    console.error(`[Settings] Tried to overload a Luau flag named "${flagName}" which does not exist.`);
-    return;
-  }
+  for (const [name, value] of Object.entries(overloads)) {
+    if (!Object.hasOwn(allFlags, name)) {
+      console.error(`[Settings] Tried to overload a Luau flag named "${name}" which does not exist.`);
+      continue;
+    }
 
-  if (typeof value !== typeof defaultValue) {
-    console.error(`[Settings] Expected value type '${typeof defaultValue}' for flag "${flagName}" but got '${typeof value}'`);
-    return;
+    const defaultValue = allFlags[name];
+
+    if (typeof value !== typeof defaultValue) {
+      console.error(`[Settings] Expected value type '${typeof defaultValue}' for flag "${name}" but got '${typeof value}'`);
+      continue;
+    }
+
+    validatedOverloads.push([name, value, value === defaultValue]);
   }
 
   settings.update((s) => {
-    const { [flagName]: _, ...remainingFlags } = s.overloadedFlags;
+    const overloadedFlags = { ...s.overloadedFlags };
 
-    return {
-      ...s,
-      overloadedFlags: value === defaultValue ? remainingFlags : { ...remainingFlags, [flagName]: value }
-    };
+    for (const [name, value, isDefault] of validatedOverloads) {
+      if (isDefault) {
+        delete overloadedFlags[name];
+      } else {
+        overloadedFlags[name] = value;
+      }
+    }
+
+    return { ...s, overloadedFlags };
   });
 }
 

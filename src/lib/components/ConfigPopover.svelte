@@ -9,7 +9,7 @@
     setDebugLevel,
     setCompilerRemarks,
     setOutputFormat,
-    setFlagOverload,
+    setFlagOverloads,
     keybindings,
     setKeybindings,
     type LuauMode, 
@@ -17,11 +17,12 @@
     type OptimizationLevel,
     type DebugLevel,
     type OutputFormat,
-    type KeybindingMode
+    type KeybindingMode,
+    type LuauFlagRecord
   } from '$lib/stores/settings';
   import { getAllFlags, getAllLints } from "$lib/luau/shared-data";
+  import { luauFeatureFlags } from '$lib/constants';
   import Button from '$lib/components/Button.svelte';
-  import KeyValueTable from '$lib/components/KeyValueTable.svelte';
   import { Icon } from '$lib/icons';
 
   const modeOptions: { value: LuauMode; label: string; description: string }[] = [
@@ -59,35 +60,45 @@
     { value: 'vim', label: 'Vim' },
   ];
 
+  async function getDefaultValuesForFlags(flagNames: string[]): Promise<LuauFlagRecord> {
+    const allFlags = await getAllFlags.promise;
+
+    const result: LuauFlagRecord = {};
+    for (const name of flagNames) {
+      result[name] = allFlags[name];
+    }
+
+    return result;
+  }
+
+  // Interface Handlers
+
+  async function refreshDiagnostics() {
+    const { refreshDiagnostics: _refreshDiagnostics } = await import('$lib/editor/setup');
+    setTimeout(() => _refreshDiagnostics(), 50);
+  }
+
   async function handleModeChange(mode: LuauMode) {
     setMode(mode);
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+    await refreshDiagnostics();
   }
 
   async function handleSolverChange(solver: SolverMode) {
     setSolver(solver);
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+    await refreshDiagnostics();
   }
 
   async function handleSetLintEnabled(lintCode: number | 'all', setEnabled: boolean) {
     if (setEnabled) await enableLint(lintCode);
     else await disableLint(lintCode);
 
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+    await refreshDiagnostics();
   }
 
-  async function handleSetFlagOverload(flagName: string, value: boolean | number) {
-    await setFlagOverload(flagName, value);
-
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+  async function handleSetFlagOverload(overloads: LuauFlagRecord) {
+    await setFlagOverloads(overloads);
+    await refreshDiagnostics();
   }
-
-  let flagSearchString: string = '';
-  let flagSearchOnlyShowModifiedFlags: boolean = false;
 
   let popoverEl: HTMLElement;
 </script>
@@ -297,69 +308,52 @@
 
     <div class="border-t border-(--border-color)"></div>
 
-    <!-- Flags Section -->
+    <!-- Flags & Features Section -->
     <div class="space-y-3">
-      <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Flags</span>
+      <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Features</span>
 
       <p class="text-xs text-(--text-muted)">
-        Luau flags allow for the configuration of internal behaviour and non-finalized features. Things might not always work, use with caution!
+        These Luau features are experimental and non-finalized. Things might not always work, use with caution!
       </p>
 
       <div class="space-y-1.5">
-        <span class="text-xs text-(--text-muted)">Flags Table</span>
+        <span class="text-xs text-(--text-muted)">Features List</span>
 
-        <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[35vh] h-[35vh] border-(--border-color) border rounded-md space-y-1">
-          <input
-            bind:value={flagSearchString}
-            class="text-xs p-1 bg-(--bg-secondary) border-(--border-color) border rounded-md"
-            placeholder="Search for flag name..."
-            type="search"
-          />
-
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              bind:checked={flagSearchOnlyShowModifiedFlags}
-              value={false}
-              type="checkbox"
-              class="w-4 h-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
-            />
-            <span class="text-xs text-(--text-secondary)">Only show modified flags</span>
-          </label>
-
-          <div class="border-t border-(--border-color)"></div>
-
-          {#await getAllFlags.promise}
-            <p class="text-xs text-(--text-secondary)">Loading flags table...</p>
-          {:then allFlags}
+        <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-2 overflow-y-auto">
+          {#each luauFeatureFlags as feature (feature.label)}
             {@const overloadedFlags = $settings.overloadedFlags}
-            <div class="overflow-y-auto">
-              <KeyValueTable
-                idlabel="luau-flag-config"
-                tableclass="w-full"
-                keyheader="Name"
-                valueheader="Value"
-                source={allFlags}
-                overloads={overloadedFlags}
-                filter={(source) => {
-                  const desiredSource = flagSearchOnlyShowModifiedFlags ? Object.entries(overloadedFlags) : source;
+            {@const isChecked = Object.entries(feature.overloads).every(
+              ([k, v]) => (overloadedFlags[k] === v)
+            )}
 
-                  // Split search string into individual search terms
-                  const query = flagSearchString.toLowerCase().split(/\s+/);
-                  query.filter(s => s.length !== 0);
-                  if (query.length === 0) return desiredSource;
+            <div class="bg-(--bg-secondary) p-2 space-y-1 rounded-md border border-(--border-color)">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onchange={async (e) => handleSetFlagOverload(
+                    isChecked
+                      ? (await getDefaultValuesForFlags(Object.keys(feature.overloads))) // Reset values to default
+                      : feature.overloads
+                  )}
+                  class="w-4 h-4 min-w-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+                  />
+                <span class="text-xs text-(--text-secondary) tracking-wide">{feature.label}</span>
+              </label>
 
-                  // Search for each term
-                  return desiredSource.filter(([key]) => (
-                    query.every(s => key.toLowerCase().includes(s))
-                  ));
-                }}
-                onentrychanged={handleSetFlagOverload}
-              />
+              <div class="border-t border-(--border-color)"></div>
+
+              <p class="text-xs text-(--text-secondary)">{feature.description}</p>
+              {#if feature.referToLink}
+                <p class="text-xs text-(--text-muted)">
+                  For further information, check out:
+                  <a class="text-link" target="_blank" rel="noopener noreferrer" href={feature.referToLink[0]}>{feature.referToLink[1]}</a>
+                </p>
+              {/if}
             </div>
-          {:catch error}
-            <p class="text-xs text-error-500">Failed to fetch Luau flags!</p>
-            <p class="text-xs text-(--text-secondary)">{error}</p>
-          {/await}
+          {:else}
+            <p class="text-xs text-(--text-secondary)">No experimental features are available at this time.</p>
+          {/each}
         </div>
       </div>
     </div>

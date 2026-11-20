@@ -47,7 +47,7 @@ async function tryOverloadFlagRecordWithRobloxStudioFlagPayload(target: LuauFlag
           const flagName = name.slice(kind.length).replace(/\d+$/, '');
 
           // Only apply base Luau flags excluding Roblox-based ones
-          if (target[flagName] === undefined) break;
+          if (!Object.hasOwn(target, flagName)) break;
 
           const primitive = value === 'True' ? true : value === 'False' ? false : parseInt(value, 10);
 
@@ -309,7 +309,7 @@ async function loadAnalysisWorker(): Promise<void> {
       // Apply settings and hook to settings changes
       const currentSettings = get(settings);
       const currentLints = currentSettings.lints === 'all' ? allLints.map(v => v.code) : currentSettings.lints;
-      const baseFlags = Object.assign({}, allLuauFlags, currentSettings.overloadedFlags);
+      const baseFlags = { ...allLuauFlags, ...currentSettings.overloadedFlags };
 
       await sendToWorker(analysis, 'setFFlags', { serializedFlags: serializeFlagRecord(baseFlags) });
       await sendToWorker(analysis, 'setMode', { mode: modeToNum(currentSettings.mode) });
@@ -359,7 +359,7 @@ async function loadExecutionWorker(): Promise<void> {
       }
 
       const currentSettings = get(settings);
-      const baseFlags = Object.assign({}, allLuauFlags, currentSettings.overloadedFlags);
+      const baseFlags = { ...allLuauFlags, ...currentSettings.overloadedFlags };
 
       await sendToWorker(execution, 'setFFlags', { serializedFlags: serializeFlagRecord(baseFlags) });
       await sendToWorker(execution, 'setMode', { mode: modeToNum(currentSettings.mode) });
@@ -527,11 +527,13 @@ export async function setLints(lints: string): Promise<void> {
 }
 
 /**
- * Overload flags on the analysis worker, and the execution worker if it's ready.
+ * Set flags on the analysis worker, and the execution worker if it's ready.
  */
 export async function setFlags(flags: LuauFlagRecord): Promise<void> {
   try {
-    const serializedFlags = serializeFlagRecord(flags);
+    const allFlags = await getAllFlags.promise;
+    const serializedFlags = serializeFlagRecord({ ...allFlags, ...flags });
+
     await sendAnalysisRequest('setFFlags', { serializedFlags });
     // Also update execution worker if it's running
     if (execution.ready) {

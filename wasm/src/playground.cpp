@@ -1152,6 +1152,17 @@ static void registerFastFlags(std::unordered_map<std::string, std::string>& fast
 
         fastFlags.erase(it);
     }
+
+    // Re-register built-in types in case any were modified by any flags
+    if (g_frontend) {
+        Luau::unfreeze(g_frontend->globals.globalTypes);
+        Luau::registerBuiltinGlobals(*g_frontend, g_frontend->globals, false);
+        Luau::freeze(g_frontend->globals.globalTypes);
+    
+        Luau::unfreeze(g_frontend->globalsForAutocomplete.globalTypes);
+        Luau::registerBuiltinGlobals(*g_frontend, g_frontend->globalsForAutocomplete, true);
+        Luau::freeze(g_frontend->globalsForAutocomplete.globalTypes);
+    }
 }
 
 static std::vector<Luau::LintWarning::Code> parseSerializedLints(std::string_view serializedLints) {
