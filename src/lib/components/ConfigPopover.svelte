@@ -337,7 +337,7 @@
                       : feature.overloads
                   )}
                   class="w-4 h-4 min-w-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
-                  />
+                />
                 <span class="text-xs text-(--text-secondary) tracking-wide">{feature.label}</span>
               </label>
 
@@ -350,6 +350,18 @@
                   <a class="text-link" target="_blank" rel="noopener noreferrer" href={feature.referToLink[0]}>{feature.referToLink[1]}</a>
                 </p>
               {/if}
+
+              <details class="text-xs text-(--text-muted)">
+                <summary title="Show the FFlags that will be modified for this feature">Show related FFlags</summary>
+                <ul class="space-y-0.5">
+                  {#each Object.entries(feature.overloads) as [name, value]}
+                    <li>
+                      <span class="text-(--text-secondary)">{name}</span><br>
+                      <span class="italic">&#10551; {value}</span>
+                    </li>
+                  {/each}
+                </ul>
+              </details>
             </div>
           {:else}
             <p class="text-xs text-(--text-secondary)">No experimental features are available at this time.</p>
