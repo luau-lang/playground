@@ -92,6 +92,7 @@ v2:
   - `optimizationLevel`: `0` | `1` | `2`
   - `debugLevel`: `0` | `1` | `2`
   - `compilerRemarks`: `boolean`
+  - `overloadedFlags`: `Record<string, boolean | number>` e.g. -> `{"LuauSomeBooleanFlag": true, "LuauSomeIntFlag": 100}`
 - `b`: Optional boolean to show bytecode panel, default false
 
 v1:

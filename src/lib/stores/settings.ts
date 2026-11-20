@@ -1,10 +1,9 @@
-// NOTE: This module imports values from 'lib/luau/wasm.ts' which creates a *cyclic dependency*.
-
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
 import { STORAGE_KEY, UI_STORAGE_KEY, KEYBINDINGS_STORAGE_KEY, defaultSettings } from '$lib/constants';
 import { detectEmbedMode } from '$lib/stores/embed';
-import { getAllLints } from '$lib/luau/wasm';
+import { getAllLints, getAllFlags } from '$lib/luau/shared-data';
+import type { LuauFlagRecord } from '$lib/luau/types';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -12,6 +11,7 @@ export type OptimizationLevel = 0 | 1 | 2;
 export type DebugLevel = 0 | 1 | 2;
 export type OutputFormat = 0 | 1 | 2 | 3;
 export type KeybindingMode = "default" | "vim";
+export type { LuauFlagRecord };
 
 const keybindingModes: readonly KeybindingMode[] = ["default", "vim"];
 
@@ -26,6 +26,8 @@ export interface PlaygroundSettings {
   debugLevel: DebugLevel;
   outputFormat: OutputFormat;
   compilerRemarks: boolean;
+  // Flags
+  overloadedFlags: LuauFlagRecord;
 }
 
 // Try to load settings from URL hash
@@ -121,6 +123,7 @@ function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings
     debugLevel: partial.debugLevel ?? defaultSettings.debugLevel,
     outputFormat: partial.outputFormat ?? defaultSettings.outputFormat,
     compilerRemarks: partial.compilerRemarks ?? defaultSettings.compilerRemarks,
+    overloadedFlags: partial.overloadedFlags ?? defaultSettings.overloadedFlags,
   };
 }
 
@@ -180,6 +183,28 @@ if (typeof window !== 'undefined' && !detectEmbedMode()) {
   });
 }
 
+// Prune all deranged entries from 'overloadedFlags'
+// This includes non-existent flag names, value type mismatches and non-overloaded values
+getAllFlags.promise
+  .then((allFlags) => (settings.update((s) => {
+    const result = { ...s.overloadedFlags };
+    let hasPruned = false;
+
+    for (const [key, value] of Object.entries(s.overloadedFlags)) {
+      const defaultValue = allFlags[key];
+      if (typeof value !== typeof defaultValue || value === defaultValue) {
+        delete result[key];
+        hasPruned = true;
+      }
+    }
+
+    // We don't need to construct a new settings object if nothing was cleaned.
+    return hasPruned ? { ...s, overloadedFlags: result } : s;
+  })))
+  .catch((err) => {
+    console.warn('[Settings] Failed to remove deranged flag overloads from settings:', err);
+  });
+
 export function setMode(mode: LuauMode): void {
   settings.update((s) => ({ ...s, mode }));
 }
@@ -189,7 +214,7 @@ export function setSolver(solver: SolverMode): void {
 }
 
 export async function enableLint(lint: number | 'all'): Promise<void> {
-  const allLints = await getAllLints;
+  const allLints = await getAllLints.promise;
   settings.update((s) => {
     if (lint === 'all') return { ...s, lints: 'all' }; // Enable all
 
@@ -202,7 +227,7 @@ export async function enableLint(lint: number | 'all'): Promise<void> {
 }
 
 export async function disableLint(lint: number | 'all'): Promise<void> {
-  const allLints = await getAllLints;
+  const allLints = await getAllLints.promise;
   settings.update((s) => {
     if (lint === 'all') return { ...s, lints: [] }; // Disable all
 
@@ -235,6 +260,41 @@ export function setKeybindings(mode: KeybindingMode): void {
 
 export function toggleBytecode(): void {
   showBytecode.update((v) => !v);
+}
+
+export async function setFlagOverloads(overloads: LuauFlagRecord): Promise<void> {
+  const allFlags = await getAllFlags.promise;
+  const validatedOverloads: [string, boolean | number, boolean][] = [];
+
+  for (const [name, value] of Object.entries(overloads)) {
+    if (!Object.hasOwn(allFlags, name)) {
+      console.error(`[Settings] Tried to overload a Luau flag named "${name}" which does not exist.`);
+      continue;
+    }
+
+    const defaultValue = allFlags[name];
+
+    if (typeof value !== typeof defaultValue) {
+      console.error(`[Settings] Expected value type '${typeof defaultValue}' for flag "${name}" but got '${typeof value}'`);
+      continue;
+    }
+
+    validatedOverloads.push([name, value, value === defaultValue]);
+  }
+
+  settings.update((s) => {
+    const overloadedFlags = { ...s.overloadedFlags };
+
+    for (const [name, value, isDefault] of validatedOverloads) {
+      if (isDefault) {
+        delete overloadedFlags[name];
+      } else {
+        overloadedFlags[name] = value;
+      }
+    }
+
+    return { ...s, overloadedFlags };
+  });
 }
 
 export function getSettings(): PlaygroundSettings {
