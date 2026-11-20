@@ -352,7 +352,12 @@
               {/if}
 
               <details class="text-xs text-(--text-muted)">
-                <summary title="Show the FFlags that will be modified for this feature">Show related FFlags</summary>
+                <summary
+                  class="hover:bg-(--bg-tertiary) select-none rounded-md pl-1"
+                  title="Show the FFlags that will be modified for this feature"
+                >
+                  Show related FFlags
+                </summary>
                 <ul class="space-y-0.5">
                   {#each Object.entries(feature.overloads) as [name, value]}
                     <li>
