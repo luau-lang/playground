@@ -27,6 +27,16 @@
     window.history.replaceState(null, '', url.toString());
   }
 
+  // Changing only the hash doesn't reload the page, so reload only when a 
+  // new shared state is pasted in.
+  onMount(() => {
+    const onHashChange = () => {
+      if (parseStateFromHash(window.location.hash) !== null) window.location.reload();
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  });
+
   onMount(() => {
     if ($isEmbed) return;
     if (parseStateFromHash(window.location.hash) === null) return;
