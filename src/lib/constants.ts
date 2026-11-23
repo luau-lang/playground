@@ -20,13 +20,13 @@ export const defaultSettings: PlaygroundSettings = {
 export const luauFeatureFlags: readonly Readonly<{
   label: string;
   description: string;
-  referToLink?: [string, string]; // The former should be the referral URL, and the latter should be a human-readable title
+  referenceURL: string; // A URL that links to an RFC, feature document or something relevant to the feature
   overloads: LuauFlagRecord;
 }>[] = [
   {
     label: 'Classes',
     description: 'Enables the user-defined classes feature. Classes allows Luau to afford a more refined way to write object-orientated code.',
-    referToLink: ['https://github.com/luau-lang/rfcs/pull/242', 'The classes RFC'],
+    referenceURL: 'https://github.com/luau-lang/rfcs/pull/242',
     overloads: {
       'DebugLuauUserDefinedClassesRuntime': true,
       'DebugLuauUserDefinedClasses': true,
@@ -35,7 +35,7 @@ export const luauFeatureFlags: readonly Readonly<{
   {
     label: 'Conditional Bindings',
     description: 'Enables the conditional bindings feature, which covers if-local and while-local bindings. Conditional bindings allow for a more concise way to handle truthy checks.',
-    referToLink: ['https://github.com/luau-lang/rfcs/pull/238', 'The conditional bindings RFC'],
+    referenceURL: 'https://github.com/luau-lang/rfcs/pull/238',
     overloads: {
       'LuauExperimentalIfLocalSyntax': true,
       'LuauExperimentalIfLocalAnalysis': true,
@@ -46,7 +46,7 @@ export const luauFeatureFlags: readonly Readonly<{
   {
     label: 'Export by Value',
     description: 'Enables the mechanism of exporting values and functions, similar to how types can be exported via "export type" today.',
-    referToLink: ['https://rfcs.luau.org/export-keyword.html', 'The export-by-value document'],
+    referenceURL: 'https://rfcs.luau.org/export-keyword.html',
     overloads: {
       'LuauExportValueSyntax': true,
       'LuauExportValueTypecheck': true,
@@ -55,7 +55,7 @@ export const luauFeatureFlags: readonly Readonly<{
   {
     label: 'Cyclic Requires',
     description: 'Enables Luau modules to be able to import each other cyclically.',
-    referToLink: ['https://github.com/luau-lang/rfcs/pull/237', 'The cyclic requires RFC'],
+    referenceURL: 'https://github.com/luau-lang/rfcs/pull/237',
     overloads: {
       'LuauCyclicRequireTypeInference': true,
       'LuauCyclicRequireTopLevelAccessError': true,
@@ -65,23 +65,12 @@ export const luauFeatureFlags: readonly Readonly<{
   {
     label: 'Buffer readvector & writevector Methods',
     description: 'Introduces new extensions to the buffer library for reading and writing two, three and four dimensional vectors.',
-    referToLink: ['https://github.com/luau-lang/rfcs/pull/198', 'The buffer library vector method extensions RFC'],
+    referenceURL: 'https://github.com/luau-lang/rfcs/pull/198',
     overloads: {
       'DebugLuauBufferVectorLibrary': true,
       'DebugLuauBufferVectorFastcalls': true,
     },
   },
-  /*
-  CURRENTLY NOT SURFACED
-  {
-    label: 'No-inline attribute',
-    description: `Introduces the "@debugnoinline" attribute.`,
-    referToLink: 'https://github.com/luau-lang/rfcs/pull/128',
-    overloads: {
-      'DebugLuauNoInline': true,
-    },
-  },
-  */
 ];
 
 // Key for localStorage persistence of settings

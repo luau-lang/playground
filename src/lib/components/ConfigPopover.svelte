@@ -338,22 +338,16 @@
                   )}
                   class="w-4 h-4 min-w-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
                 />
-                <span class="text-xs text-(--text-secondary) tracking-wide">{feature.label}</span>
+                <a class="text-link text-xs tracking-wide" target="_blank" rel="noopener noreferrer" href={feature.referenceURL}>{feature.label}</a>
               </label>
 
               <div class="border-t border-(--border-color)"></div>
 
               <p class="text-xs text-(--text-secondary)">{feature.description}</p>
-              {#if feature.referToLink}
-                <p class="text-xs text-(--text-muted)">
-                  For further information, check out:
-                  <a class="text-link" target="_blank" rel="noopener noreferrer" href={feature.referToLink[0]}>{feature.referToLink[1]}</a>
-                </p>
-              {/if}
 
               <details class="text-xs text-(--text-muted)">
                 <summary
-                  class="hover:bg-(--bg-tertiary) select-none rounded-md pl-1"
+                  class="hover:bg-(--bg-tertiary) cursor-pointer select-none rounded-md pl-1"
                   title="Show the FFlags that will be modified for this feature"
                 >
                   Show related FFlags
