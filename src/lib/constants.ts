@@ -17,7 +17,7 @@ export const defaultSettings: PlaygroundSettings = {
 };
 
 // A set of experimental Luau features that are considerable additions to the language
-export const luauFeatureFlags: readonly Readonly<{
+export const luauExperimentalFeatures: readonly Readonly<{
   label: string;
   description: string;
   referenceURL: string; // A URL that links to an RFC, feature document or something relevant to the feature
@@ -34,7 +34,7 @@ export const luauFeatureFlags: readonly Readonly<{
   },
   {
     label: 'Conditional Bindings',
-    description: 'Enables the conditional bindings feature, which covers if-local and while-local bindings. Conditional bindings allow for a more concise way to handle truthy checks.',
+    description: 'Enables the conditional bindings feature, which covers if-local and while-local bindings.',
     referenceURL: 'https://github.com/luau-lang/rfcs/pull/238',
     overloads: {
       'LuauExperimentalIfLocalSyntax': true,
@@ -45,7 +45,7 @@ export const luauFeatureFlags: readonly Readonly<{
   },
   {
     label: 'Export by Value',
-    description: 'Enables the mechanism of exporting values and functions, similar to how types can be exported via "export type" today.',
+    description: 'Enables the mechanism of exporting values, similar to how types can be exported via "export type" today.',
     referenceURL: 'https://rfcs.luau.org/export-keyword.html',
     overloads: {
       'LuauExportValueSyntax': true,

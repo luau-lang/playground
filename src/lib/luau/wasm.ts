@@ -529,7 +529,7 @@ export async function setLints(lints: string): Promise<void> {
 /**
  * Set flags on the analysis worker, and the execution worker if it's ready.
  */
-export async function setFlags(flags: LuauFlagRecord): Promise<void> {
+export async function setLuauFlags(flags: LuauFlagRecord): Promise<void> {
   try {
     const allFlags = await getAllFlags.promise;
     const serializedFlags = serializeFlagRecord({ ...allFlags, ...flags });
@@ -554,7 +554,7 @@ export function initSettingsSync(): void {
     if (analysis.ready) {
       const currentLints = newSettings.lints === 'all' ? (await getAllLints.promise).map(v => v.code) : newSettings.lints;
 
-      await setFlags(newSettings.overloadedFlags);
+      await setLuauFlags(newSettings.overloadedFlags);
       await setLuauMode(newSettings.mode);
       await setLuauSolver(newSettings.solver);
       await setLints(currentLints.join(','));

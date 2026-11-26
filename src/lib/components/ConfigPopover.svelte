@@ -21,7 +21,7 @@
     type LuauFlagRecord
   } from '$lib/stores/settings';
   import { getAllFlags, getAllLints } from "$lib/luau/shared-data";
-  import { luauFeatureFlags } from '$lib/constants';
+  import { luauExperimentalFeatures } from '$lib/constants';
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
 
@@ -65,7 +65,7 @@
 
     const result: LuauFlagRecord = {};
     for (const name of flagNames) {
-      result[name] = allFlags[name];
+      if (Object.hasOwn(allFlags, name)) result[name] = allFlags[name];
     }
 
     return result;
@@ -320,51 +320,66 @@
         <span class="text-xs text-(--text-muted)">Features List</span>
 
         <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-2 overflow-y-auto">
-          {#each luauFeatureFlags as feature (feature.label)}
+          {#await getAllFlags.promise}
+            <p class="text-xs text-(--text-secondary)">Loading Luau default flags...</p>
+          {:then allFlags}
             {@const overloadedFlags = $settings.overloadedFlags}
-            {@const isChecked = Object.entries(feature.overloads).every(
-              ([k, v]) => (overloadedFlags[k] === v)
-            )}
 
-            <div class="bg-(--bg-secondary) p-2 space-y-1 rounded-md border border-(--border-color)">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onchange={async (e) => handleSetFlagOverload(
-                    isChecked
-                      ? (await getDefaultValuesForFlags(Object.keys(feature.overloads))) // Reset values to default
-                      : feature.overloads
-                  )}
-                  class="w-4 h-4 min-w-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
-                />
-                <a class="text-link text-xs tracking-wide" target="_blank" rel="noopener noreferrer" href={feature.referenceURL}>{feature.label}</a>
-              </label>
+            {#each luauExperimentalFeatures as feature (feature.label)}
+              {@const isFeatureRolledOut = Object.entries(feature.overloads).every(
+                ([k, v]) => (allFlags[k] === v)
+              )}
 
-              <div class="border-t border-(--border-color)"></div>
+              <!-- We don't need to render the features div if all FValues within default flags are already enabled -->
+              {#if !isFeatureRolledOut}
+                {@const isChecked = Object.entries(feature.overloads).every(
+                  ([k, v]) => (overloadedFlags[k] === v)
+                )}
 
-              <p class="text-xs text-(--text-secondary)">{feature.description}</p>
+                <div class="bg-(--bg-secondary) p-2 space-y-1 rounded-md border border-(--border-color)">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onchange={async (e) => handleSetFlagOverload(
+                        isChecked
+                          ? (await getDefaultValuesForFlags(Object.keys(feature.overloads))) // Reset FValues to defaults
+                          : feature.overloads
+                      )}
+                      class="w-4 h-4 min-w-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+                      />
+                    <a class="text-link text-xs tracking-wide" target="_blank" rel="noopener noreferrer" href={feature.referenceURL}>{feature.label}</a>
+                  </label>
 
-              <details class="text-xs text-(--text-muted)">
-                <summary
-                  class="hover:bg-(--bg-tertiary) cursor-pointer select-none rounded-md pl-1"
-                  title="Show the FFlags that will be modified for this feature"
-                >
-                  Show related FFlags
-                </summary>
-                <ul class="space-y-0.5">
-                  {#each Object.entries(feature.overloads) as [name, value]}
-                    <li>
-                      <span class="text-(--text-secondary)">{name}</span><br>
-                      <span class="italic">&#10551; {value}</span>
-                    </li>
-                  {/each}
-                </ul>
-              </details>
-            </div>
-          {:else}
-            <p class="text-xs text-(--text-secondary)">No experimental features are available at this time.</p>
-          {/each}
+                  <div class="border-t border-(--border-color)"></div>
+
+                  <p class="text-xs text-(--text-secondary)">{feature.description}</p>
+
+                  <details class="text-xs text-(--text-muted)">
+                    <summary
+                      class="hover:bg-(--bg-tertiary) cursor-pointer select-none rounded-md pl-1"
+                      title="Show the FFlags that will be modified for this feature"
+                    >
+                      Show related FFlags
+                    </summary>
+                    <ul class="space-y-0.5">
+                      {#each Object.entries(feature.overloads) as [name, value]}
+                        <li>
+                          <div class="text-(--text-secondary)">{name}</div>
+                          <div class="italic text-(--text-muted)">⤷ {value}</div>
+                        </li>
+                      {/each}
+                    </ul>
+                  </details>
+                </div>
+              {/if}
+            {:else}
+              <p class="text-xs text-(--text-secondary)">No experimental features are available at this time.</p>
+            {/each}
+          {:catch error}
+            <p class="text-xs text-error-500">Failed to fetch Luau default flags!</p>
+            <p class="text-xs text-(--text-secondary)">{error}</p>
+          {/await}
         </div>
       </div>
     </div>
