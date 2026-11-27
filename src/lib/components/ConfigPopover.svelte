@@ -9,6 +9,7 @@
     setDebugLevel,
     setCompilerRemarks,
     setOutputFormat,
+    setFlagOverloads,
     keybindings,
     setKeybindings,
     type LuauMode, 
@@ -16,9 +17,11 @@
     type OptimizationLevel,
     type DebugLevel,
     type OutputFormat,
-    type KeybindingMode
+    type KeybindingMode,
+    type LuauFlagRecord
   } from '$lib/stores/settings';
-  import { getAllLints } from "$lib/luau/wasm";
+  import { getAllFlags, getAllLints } from "$lib/luau/shared-data";
+  import { luauExperimentalFeatures } from '$lib/constants';
   import Button from '$lib/components/Button.svelte';
   import { Icon } from '$lib/icons';
 
@@ -57,24 +60,44 @@
     { value: 'vim', label: 'Vim' },
   ];
 
+  async function getDefaultValuesForFlags(flagNames: string[]): Promise<LuauFlagRecord> {
+    const allFlags = await getAllFlags.promise;
+
+    const result: LuauFlagRecord = {};
+    for (const name of flagNames) {
+      if (Object.hasOwn(allFlags, name)) result[name] = allFlags[name];
+    }
+
+    return result;
+  }
+
+  // Interface Handlers
+
+  async function refreshDiagnostics() {
+    const { refreshDiagnostics: _refreshDiagnostics } = await import('$lib/editor/setup');
+    setTimeout(() => _refreshDiagnostics(), 50);
+  }
+
   async function handleModeChange(mode: LuauMode) {
     setMode(mode);
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+    await refreshDiagnostics();
   }
 
   async function handleSolverChange(solver: SolverMode) {
     setSolver(solver);
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+    await refreshDiagnostics();
   }
 
   async function handleSetLintEnabled(lintCode: number | 'all', setEnabled: boolean) {
     if (setEnabled) await enableLint(lintCode);
     else await disableLint(lintCode);
 
-    const { refreshDiagnostics } = await import('$lib/editor/setup');
-    setTimeout(() => refreshDiagnostics(), 50);
+    await refreshDiagnostics();
+  }
+
+  async function handleSetFlagOverload(overloads: LuauFlagRecord) {
+    await setFlagOverloads(overloads);
+    await refreshDiagnostics();
   }
 
   let popoverEl: HTMLElement;
@@ -241,7 +264,7 @@
         <span class="text-xs text-(--text-muted)">Enabled Lints</span>
 
         <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-1">
-          {#await getAllLints}
+          {#await getAllLints.promise}
             <p class="text-xs text-(--text-secondary)">Loading lint options...</p>
           {:then allLints} {#if allLints.length > 0}
             {@const currentLints = $settings.lints}
@@ -276,7 +299,85 @@
           {:else}
             <p class="text-xs text-(--text-secondary)">No available lint options were found.</p>
           {/if} {:catch error}
-            <p class="text-xs text-red-500">Failed to fetch Luau lint options!</p>
+            <p class="text-xs text-error-500">Failed to fetch Luau lint options!</p>
+            <p class="text-xs text-(--text-secondary)">{error}</p>
+          {/await}
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-(--border-color)"></div>
+
+    <!-- Flags & Features Section -->
+    <div class="space-y-3">
+      <span class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wide">Features</span>
+
+      <p class="text-xs text-(--text-muted)">
+        These Luau features are experimental and non-finalized. Things might not always work, use with caution!
+      </p>
+
+      <div class="space-y-1.5">
+        <span class="text-xs text-(--text-muted)">Features List</span>
+
+        <div class="flex flex-col p-2 bg-(--bg-tertiary) max-h-[30vh] border-(--border-color) border rounded-md space-y-2 overflow-y-auto">
+          {#await getAllFlags.promise}
+            <p class="text-xs text-(--text-secondary)">Loading Luau default flags...</p>
+          {:then allFlags}
+            {@const overloadedFlags = $settings.overloadedFlags}
+
+            {#each luauExperimentalFeatures as feature (feature.label)}
+              {@const isFeatureRolledOut = Object.entries(feature.overloads).every(
+                ([k, v]) => (allFlags[k] === v)
+              )}
+
+              <!-- We don't need to render the features div if all FValues within default flags are already enabled -->
+              {#if !isFeatureRolledOut}
+                {@const isChecked = Object.entries(feature.overloads).every(
+                  ([k, v]) => (overloadedFlags[k] === v)
+                )}
+
+                <div class="bg-(--bg-secondary) p-2 space-y-1 rounded-md border border-(--border-color)">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onchange={async (e) => handleSetFlagOverload(
+                        isChecked
+                          ? (await getDefaultValuesForFlags(Object.keys(feature.overloads))) // Reset FValues to defaults
+                          : feature.overloads
+                      )}
+                      class="w-4 h-4 min-w-4 rounded border-(--border-color) bg-(--bg-tertiary) accent-(--accent)"
+                      />
+                    <a class="text-link text-xs tracking-wide" target="_blank" rel="noopener noreferrer" href={feature.referenceURL}>{feature.label}</a>
+                  </label>
+
+                  <div class="border-t border-(--border-color)"></div>
+
+                  <p class="text-xs text-(--text-secondary)">{feature.description}</p>
+
+                  <details class="text-xs text-(--text-muted)">
+                    <summary
+                      class="hover:bg-(--bg-tertiary) cursor-pointer select-none rounded-md pl-1"
+                      title="Show the FFlags that will be modified for this feature"
+                    >
+                      Show related FFlags
+                    </summary>
+                    <ul class="space-y-0.5">
+                      {#each Object.entries(feature.overloads) as [name, value]}
+                        <li>
+                          <div class="text-(--text-secondary)">{name}</div>
+                          <div class="italic text-(--text-muted)">⤷ {value}</div>
+                        </li>
+                      {/each}
+                    </ul>
+                  </details>
+                </div>
+              {/if}
+            {:else}
+              <p class="text-xs text-(--text-secondary)">No experimental features are available at this time.</p>
+            {/each}
+          {:catch error}
+            <p class="text-xs text-error-500">Failed to fetch Luau default flags!</p>
             <p class="text-xs text-(--text-secondary)">{error}</p>
           {/await}
         </div>
@@ -313,7 +414,7 @@
   }
 
   .text-link {
-    color: var(--color-accent-500);
+    color: var(--color-blue-600);
     text-decoration: underline;
   }
 

@@ -12,6 +12,7 @@ import type {
   AutocompleteResult, 
   HoverResult,
   LintsResult,
+  FFlagsResult,
   CreateLuauModule 
 } from './types';
 import createLuauModuleFactory from './luau-module.js';
@@ -35,6 +36,7 @@ export type WorkerRequest =
   | { type: 'setLints'; serializedLints: string }
   | { type: 'getLints' }
   | { type: 'setFFlags'; serializedFlags: string }
+  | { type: 'getFFlags' }
   | { type: 'getBytecode'; code: string; optimizationLevel: number; debugLevel: number; outputFormat: number; showRemarks: boolean }
   | { type: 'registerModules'; modules: Record<string, string> }
   | { type: 'registerSources'; sources: Record<string, string> };
@@ -51,6 +53,7 @@ export type WorkerResponse =
   | { type: 'setLints'; success: boolean }
   | { type: 'getLints'; result: LintsResult }
   | { type: 'setFFlags'; success: boolean }
+  | { type: 'getFFlags'; result: FFlagsResult }
   | { type: 'getBytecode'; result: { success: boolean; bytecode: string; error?: string } }
   | { type: 'registerModules'; success: boolean }
   | { type: 'registerSources'; success: boolean }
@@ -205,6 +208,14 @@ self.onmessage = async (e: MessageEvent<WorkerRequest & { requestId: string }>) 
         const module = await loadModule();
         module.ccall('luau_set_fflags', null, ['string'], [request.serializedFlags]);
         respond(requestId, { type: 'setFFlags', success: true });
+        break;
+      }
+      
+      case 'getFFlags': {
+        const module = await loadModule();
+        const resultJson = module.ccall('luau_get_fflags', 'string', [], []);
+        const result = JSON.parse(resultJson) as FFlagsResult;
+        respond(requestId, { type: 'getFFlags', result });
         break;
       }
       
